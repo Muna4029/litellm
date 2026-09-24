@@ -1,7 +1,7 @@
 from typing import Iterable, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict
-from typing_extensions import Literal, Required, TypedDict
+from typing import Literal, Required, TypedDict
 
 
 class ChatCompletionSystemMessageParam(TypedDict, total=False):

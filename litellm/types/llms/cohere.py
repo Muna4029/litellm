@@ -1,6 +1,6 @@
 from typing import Iterable, List, Optional, Union
 
-from typing_extensions import Literal, Required, TypedDict
+from typing import Literal, Required, TypedDict
 
 
 class CallObject(TypedDict):
