@@ -156,6 +156,7 @@ class _PROXY_MaxParallelRequestsHandler(CustomLogger):
         results = await self.internal_usage_cache.async_batch_get_cache(
             keys=keys,
             parent_otel_span=parent_otel_span,
+            local_only=True,
         )
 
         if results is None:
