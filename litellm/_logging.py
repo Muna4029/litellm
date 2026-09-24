@@ -3,7 +3,7 @@ import logging
 import os
 import sys
 from datetime import datetime
-from logging import Formatter
+from logging import Formatter, StreamHandler
 
 set_verbose = False
 
@@ -12,10 +12,32 @@ if set_verbose is True:
         "`litellm.set_verbose` is deprecated. Please set `os.environ['LITELLM_LOG'] = 'DEBUG'` for debug logs."
     )
 json_logs = bool(os.getenv("JSON_LOGS", False))
+
+
+class _LiteLLMStreamHandler(StreamHandler):
+    """
+    Custom StreamHandler that handles I/O errors gracefully.
+    This prevents ValueError: I/O operation on closed file errors
+    during parallel test teardown when streams are closed.
+    """
+
+    def handleError(self, record):
+        """
+        Handle errors during logging gracefully.
+        Suppress I/O errors when stream is closed during teardown.
+        """
+        try:
+            super().handleError(record)
+        except (ValueError, OSError, IOError):
+            # Silently ignore I/O errors when stream is closed
+            # This happens during parallel pytest teardown (-n 4)
+            pass
+
+
 # Create a handler for the logger (you may need to adapt this based on your needs)
 log_level = os.getenv("LITELLM_LOG", "DEBUG")
 numeric_level: str = getattr(logging, log_level.upper())
-handler = logging.StreamHandler()
+handler = _LiteLLMStreamHandler()
 handler.setLevel(numeric_level)
 
 
@@ -44,7 +66,7 @@ class JsonFormatter(Formatter):
 # Function to set up exception handlers for JSON logging
 def _setup_json_exception_handlers(formatter):
     # Create a handler with JSON formatting for exceptions
-    error_handler = logging.StreamHandler()
+    error_handler = _LiteLLMStreamHandler()
     error_handler.setFormatter(formatter)
 
     # Setup excepthook for uncaught exceptions
@@ -135,7 +157,7 @@ def _turn_on_json():
 
     - Adds a JSON formatter to all loggers
     """
-    handler = logging.StreamHandler()
+    handler = _LiteLLMStreamHandler()
     handler.setFormatter(JsonFormatter())
     _initialize_loggers_with_handler(handler)
     # Set up exception handlers
