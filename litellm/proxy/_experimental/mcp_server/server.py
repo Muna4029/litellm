@@ -287,19 +287,23 @@ if MCP_AVAILABLE:
         if mcp_servers is not None:
             # Convert to lowercase for case-insensitive comparison
             mcp_servers_lower = [s.lower() for s in mcp_servers]
-            allowed_mcp_servers = [
-                server_id
-                for server_id in allowed_mcp_servers
+            _filtered_servers = []
+            for server_id in allowed_mcp_servers:
+                server = global_mcp_server_manager.get_mcp_server_by_id(server_id)
+                server_aliases = []
+                if server is not None:
+                    if server.alias is not None:
+                        server_aliases.append(server.alias)
+                    if server.server_name is not None:
+                        server_aliases.append(server.server_name)
+                server_aliases.append(server_id)
                 if any(
                     server_alias.lower() in mcp_servers_lower
-                    for server_alias in [
-                        global_mcp_server_manager.get_mcp_server_by_id(server_id).alias,
-                        global_mcp_server_manager.get_mcp_server_by_id(server_id).server_name,
-                        server_id,
-                    ]
+                    for server_alias in server_aliases
                     if server_alias is not None
-                )
-            ]
+                ):
+                    _filtered_servers.append(server_id)
+            allowed_mcp_servers = _filtered_servers
 
         # Get tools from each allowed server
         all_tools = []
@@ -310,10 +314,11 @@ if MCP_AVAILABLE:
 
             # Get server-specific auth header if available
             server_auth_header = None
-            if mcp_server_auth_headers and server.alias is not None:
-                server_auth_header = mcp_server_auth_headers.get(server.alias)
-            elif mcp_server_auth_headers and server.server_name is not None:
-                server_auth_header = mcp_server_auth_headers.get(server.server_name)
+            if server is not None:
+                if mcp_server_auth_headers and server.alias is not None:
+                    server_auth_header = mcp_server_auth_headers.get(server.alias)
+                elif mcp_server_auth_headers and server.server_name is not None:
+                    server_auth_header = mcp_server_auth_headers.get(server.server_name)
             
             # Fall back to deprecated mcp_auth_header if no server-specific header found
             if server_auth_header is None:
