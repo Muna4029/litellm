@@ -4,7 +4,7 @@ Mistral chat completion handler
 For handling Mistral chat completions using the newer llm_http_handler pattern.
 """
 
-from typing import Optional
+
 from litellm.llms.custom_httpx.llm_http_handler import BaseLLMHTTPHandler
 from litellm.llms.mistral.mistral_chat_transformation import MistralConfig
 from litellm.types.utils import ModelResponse
@@ -24,10 +24,10 @@ def completion(
     timeout,
     litellm_params: dict,
     acompletion: bool,
-    stream: Optional[bool] = False,
+    stream: bool | None = False,
     fake_stream: bool = False,
-    api_key: Optional[str] = None,
-    headers: Optional[dict] = None,
+    api_key: str | None = None,
+    headers: dict | None = None,
     client=None,
     **kwargs,
 ):
@@ -38,9 +38,10 @@ def completion(
     provider_config = MistralConfig()
     
     # Get the API base and key from the config
-    api_base, api_key = provider_config._get_openai_compatible_provider_info(
+    _provider_api_base, api_key = provider_config._get_openai_compatible_provider_info(
         api_base=api_base, api_key=api_key
     )
+    api_base = _provider_api_base or ""
     
     # Use the base handler for the actual HTTP calls
     return base_llm_http_handler.completion(
@@ -76,12 +77,12 @@ async def acompletion(
     optional_params: dict,
     timeout,
     litellm_params: dict,
-    stream: Optional[bool] = False,
+    stream: bool | None = False,
     fake_stream: bool = False,
-    api_key: Optional[str] = None,
-    headers: Optional[dict] = {},
+    api_key: str | None = None,
+    headers: dict | None = {},
     client=None,
-    provider_config: Optional[MistralConfig] = None,
+    provider_config: MistralConfig | None = None,
 ):
     """
     Async Mistral completion using the newer llm_http_handler pattern.
