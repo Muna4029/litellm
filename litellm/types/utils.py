@@ -2487,3 +2487,26 @@ class DynamicPromptManagementParamLiteral(str, Enum):
     @classmethod
     def list_all_params(cls):
         return [param.value for param in cls]
+
+
+def get_valid_models(
+    check_provider_endpoint: Optional[bool] = None,
+    custom_llm_provider: Optional[str] = None,
+    litellm_params: Optional["LiteLLM_Params"] = None,
+) -> List[str]:
+    """
+    Returns a list of valid LLMs based on the set environment variables
+
+    Args:
+        check_provider_endpoint: If True, will check the provider's endpoint for valid models.
+        custom_llm_provider: If provided, will only check the provider's endpoint for valid models.
+    Returns:
+        A list of valid LLMs
+    """
+    from litellm.utils import get_valid_models as _get_valid_models
+
+    return _get_valid_models(
+        check_provider_endpoint=check_provider_endpoint,
+        custom_llm_provider=custom_llm_provider,
+        litellm_params=litellm_params,
+    )
