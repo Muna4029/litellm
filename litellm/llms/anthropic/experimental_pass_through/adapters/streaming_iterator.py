@@ -4,7 +4,8 @@ import json
 import traceback
 import uuid
 from collections import deque
-from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator, Literal, Optional
+from collections.abc import AsyncIterator, Iterator
+from typing import TYPE_CHECKING, Any, Literal
 
 from litellm import verbose_logger
 from litellm.types.llms.anthropic import UsageDelta
@@ -37,14 +38,15 @@ class AnthropicStreamWrapper(AdapterCompletionStreamWrapper):
     sent_content_block_finish: bool = False
     current_content_block_type: Literal["text", "tool_use"] = "text"
     sent_last_message: bool = False
-    holding_chunk: Optional[Any] = None
-    holding_stop_reason_chunk: Optional[Any] = None
+    holding_chunk: Any | None = None
+    holding_stop_reason_chunk: Any | None = None
     current_content_block_index: int = 0
     current_content_block_start: ContentBlockContentBlockDict = TextBlock(
         type="text",
         text="",
     )
     chunk_queue: deque = deque()  # Queue for buffering multiple chunks
+    pending_new_content_block: bool = False
 
     def __next__(self):
         from .transformation import LiteLLMAnthropicMessagesAdapter
@@ -55,7 +57,7 @@ class AnthropicStreamWrapper(AdapterCompletionStreamWrapper):
                 return {
                     "type": "message_start",
                     "message": {
-                        "id": "msg_{}".format(uuid.uuid4()),
+                        "id": f"msg_{uuid.uuid4()}",
                         "type": "message",
                         "role": "assistant",
                         "content": [],
@@ -141,7 +143,7 @@ class AnthropicStreamWrapper(AdapterCompletionStreamWrapper):
             raise StopIteration
         except Exception as e:
             verbose_logger.error(
-                "Anthropic Adapter - {}\n{}".format(e, traceback.format_exc())
+                f"Anthropic Adapter - {e}\n{traceback.format_exc()}"
             )
             raise StopAsyncIteration
 
@@ -160,7 +162,7 @@ class AnthropicStreamWrapper(AdapterCompletionStreamWrapper):
                     {
                         "type": "message_start",
                         "message": {
-                            "id": "msg_{}".format(uuid.uuid4()),
+                            "id": f"msg_{uuid.uuid4()}",
                             "type": "message",
                             "role": "assistant",
                             "content": [],
