@@ -1,5 +1,5 @@
 import types
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from openai.types.image import Image
 
@@ -69,10 +69,10 @@ class AmazonNovaCanvasConfig:
         image_generation_config = optional_params.pop("imageGenerationConfig", {})
         image_generation_config = {**image_generation_config, **optional_params}
         if task_type == "TEXT_IMAGE":
-            text_to_image_params: Dict[str, Any] = image_generation_config.pop(
+            text_to_image_params: Mapping[str, Any] = image_generation_config.pop(
                 "textToImageParams", {}
             )
-            text_to_image_params = {"text": text, **text_to_image_params}
+            text_to_image_params = {"text": text, **text_to_image_params}  # type: ignore[typeddict-item]
             try:
                 text_to_image_params_typed = AmazonNovaCanvasTextToImageParams(
                     **text_to_image_params  # type: ignore
@@ -128,13 +128,13 @@ class AmazonNovaCanvasConfig:
                 imageGenerationConfig=image_generation_config_typed,
             )
         if task_type == "INPAINTING":
-            inpainting_params: Dict[str, Any] = image_generation_config.pop(
+            inpainting_params: Mapping[str, Any] = image_generation_config.pop(
                 "inpaintingParams", {}
             )
-            inpainting_params = {"text": text, **inpainting_params}
+            inpainting_params = {"text": text, **inpainting_params}  # type: ignore[typeddict-item]
             try:
                 inpainting_params_typed = AmazonNovaCanvasInpaintingParams(
-                    **inpainting_params
+                    **inpainting_params  # type: ignore[typeddict-item]
                 )
             except Exception as e:
                 raise ValueError(
