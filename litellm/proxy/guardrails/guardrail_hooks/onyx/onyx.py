@@ -4,19 +4,20 @@
 #                   https://onyx.security/
 #
 # +-------------------------------------------------------------+
-from enum import Enum
 import os
-from typing import TYPE_CHECKING, Any, Optional, Type, Union
 import uuid
+from enum import Enum
+from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException
+
 from litellm._logging import verbose_proxy_logger
+from litellm.caching.caching import DualCache
+from litellm.integrations.custom_guardrail import CustomGuardrail
 from litellm.llms.custom_httpx.http_handler import (
     get_async_httpx_client,
     httpxSpecialProvider,
 )
-from litellm.caching.caching import DualCache
-from litellm.integrations.custom_guardrail import CustomGuardrail
 from litellm.proxy._types import UserAPIKeyAuth
 from litellm.types.utils import CallTypesLiteral, LLMResponseTypes
 
@@ -33,7 +34,7 @@ class HookType(Enum):
 
 
 class OnyxGuardrail(CustomGuardrail):
-    def __init__(self, api_base: Optional[str] = None, api_key: Optional[str] = None, **kwargs):
+    def __init__(self, api_base: str | None = None, api_key: str | None = None, **kwargs):
         self.async_handler = get_async_httpx_client(llm_provider=httpxSpecialProvider.GuardrailCallback)
         self.api_base = api_base or os.getenv(
             "ONYX_API_BASE",
@@ -102,7 +103,7 @@ class OnyxGuardrail(CustomGuardrail):
         cache: DualCache,
         data: dict,
         call_type: CallTypesLiteral,
-    ) -> Union[Exception, str, dict, None]:
+    ) -> Exception | str | dict | None:
         """
         Validate and modify input before sending to LLM
         """
@@ -120,7 +121,7 @@ class OnyxGuardrail(CustomGuardrail):
         except HTTPException as e:
             raise e
         except Exception as e:
-            verbose_proxy_logger.error(f"Error in pre-call guard: {str(e)}")
+            verbose_proxy_logger.error(f"Error in pre-call guard: {e!s}")
             return data
 
     async def async_moderation_hook(
@@ -128,7 +129,7 @@ class OnyxGuardrail(CustomGuardrail):
         data: dict,
         user_api_key_dict: UserAPIKeyAuth,
         call_type: CallTypesLiteral,
-    ) -> Union[Exception, str, dict, None]:
+    ) -> Exception | str | dict | None:
         """
         Reject requests that violate Onyx Guard policies
         """
@@ -146,7 +147,7 @@ class OnyxGuardrail(CustomGuardrail):
         except HTTPException as e:
             raise e
         except Exception as e:
-            verbose_proxy_logger.error(f"Error in moderation Onyx Guard: {str(e)}")
+            verbose_proxy_logger.error(f"Error in moderation Onyx Guard: {e!s}")
             return data
 
     async def async_post_call_success_hook(
@@ -163,6 +164,7 @@ class OnyxGuardrail(CustomGuardrail):
         conversation_id = self._handle_conversation_id(data)
 
         try:
+            payload: Any
             # Convert response to dict format for validation
             if isinstance(response, dict):
                 # TypedDict or plain dict
@@ -184,11 +186,11 @@ class OnyxGuardrail(CustomGuardrail):
         except HTTPException as e:
             raise e
         except Exception as e:
-            verbose_proxy_logger.error(f"Error in post-call Onyx Guard: {str(e)}")
+            verbose_proxy_logger.error(f"Error in post-call Onyx Guard: {e!s}")
             return response
 
     @staticmethod
-    def get_config_model() -> Optional[Type["GuardrailConfigModel"]]:
+    def get_config_model() -> type["GuardrailConfigModel"] | None:
         from litellm.types.proxy.guardrails.guardrail_hooks.onyx import (
             OnyxGuardrailConfigModel,
         )
