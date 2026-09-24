@@ -49,15 +49,21 @@ async def handle_update_object_permission_common(
         return None
 
     # Lookup existing object permission ID and update that entry
-    object_permission_id_to_use: str = existing_object_permission_id or str(
-        uuid.uuid4()
-    )
+    # Use existing_object_permission_id for the database lookup query
+    object_permission_id_to_lookup = existing_object_permission_id
     existing_object_permissions_dict: Dict = {}
 
     existing_object_permission = (
         await prisma_client.db.litellm_objectpermissiontable.find_unique(
-            where={"object_permission_id": object_permission_id_to_use},
+            where={"object_permission_id": object_permission_id_to_lookup},
         )
+    )
+
+    # Use the found row's object_permission_id for writes, or fall back to existing_object_permission_id or a new UUID
+    object_permission_id_to_use = (
+        existing_object_permission.object_permission_id
+        if existing_object_permission is not None
+        else existing_object_permission_id or str(uuid.uuid4())
     )
 
     # Update the object permission

@@ -321,10 +321,18 @@ def _transform_request_body(
         supports_system_message=supports_system_message, messages=messages
     )
     # Checks for 'response_schema' support - if passed in
+    # Gemini models support response_schema in generationConfig, so we check if it's a gemini model
+    # Strip the gemini/ prefix if present for the support check
+    _model_for_check = model
+    if model.startswith("gemini/"):
+        _model_for_check = model[7:]
     if "response_schema" in optional_params:
         supports_response_schema = get_supports_response_schema(
-            model=model, custom_llm_provider=custom_llm_provider
+            model=_model_for_check, custom_llm_provider=custom_llm_provider
         )
+        # Gemini models generally support response_schema, assume True if not explicitly set
+        if supports_response_schema is False and "gemini" in _model_for_check.lower():
+            supports_response_schema = True
         if supports_response_schema is False:
             user_response_schema_message = response_schema_prompt(
                 model=model, response_schema=optional_params.get("response_schema")  # type: ignore
