@@ -129,6 +129,8 @@ def test_completion_missing_role(openai_api_response):
         )
 
         mock_create.assert_called_once()
+        # Ensure that the mock_create is called with the expected arguments
+        mock_create.assert_called_with(expected_args)
 
 
 @pytest.mark.parametrize(
@@ -264,6 +266,8 @@ def test_bedrock_latency_optimized_inference():
             print(e)
 
         mock_post.assert_called_once()
+        # Ensure that the mock_post is called with the expected arguments
+        mock_post.assert_called_with(expected_args)
         json_data = json.loads(mock_post.call_args.kwargs["data"])
         assert json_data["performanceConfig"]["latency"] == "optimized"
 
@@ -282,6 +286,8 @@ def test_custom_provider_with_extra_headers():
         )
 
         mock_post.assert_called_once()
+        # Ensure that the mock_post is called with the expected arguments
+        mock_post.assert_called_with(expected_args)
         assert mock_post.call_args[1]["headers"]["X-Custom-Header"] == "custom-value"
 
 
@@ -301,6 +307,8 @@ def test_custom_provider_with_extra_body():
             api_base="https://example.com/api/v1",
         )
         mock_post.assert_called_once()
+        # Ensure that the mock_post is called with the expected arguments
+        mock_post.assert_called_with(expected_args)
 
         assert mock_post.call_args[1]["json"]["X-Custom-BodyValue"] == "custom-value"
         assert mock_post.call_args[1]["json"] == {
@@ -326,6 +334,8 @@ def test_custom_provider_with_extra_body():
             api_base="https://example.com/api/v1",
         )
         mock_post.assert_called_once()
+        # Ensure that the mock_post is called with the expected arguments
+        mock_post.assert_called_with(expected_args)
         assert mock_post.call_args[1]["json"] == {
             "model": "custom",
             "params": {
@@ -512,6 +522,8 @@ def test_responses_api_bridge_check_strips_responses_prefix():
         )
 
         assert model == "gpt-4-responses"
+        # Ensure that the mock_get_model_info is called as expected
+        mock_get_model_info.assert_called_once()
         assert model_info["mode"] == "responses"
 
 
@@ -527,6 +539,8 @@ def test_responses_api_bridge_check_handles_exception():
         )
 
         assert model == "custom-model"
+        # Ensure that the mock_get_model_info is called as expected
+        mock_get_model_info.assert_called_once()
         assert model_info["mode"] == "responses"
 
 
