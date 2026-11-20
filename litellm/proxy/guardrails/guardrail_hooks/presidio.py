@@ -120,6 +120,8 @@ class _OPTIONAL_PresidioPIIMasking(CustomGuardrail):
             self.presidio_analyzer_api_base.startswith("http://")
             or self.presidio_analyzer_api_base.startswith("https://")
         ):
+            raise Exception("`PRESIDIO_ANALYZER_API_BASE` must start with 'http://' or 'https://' and cannot be None")
+        ):
             # add http:// if unset, assume communicating over private network - e.g. render
             self.presidio_analyzer_api_base = (
                 "http://" + self.presidio_analyzer_api_base
@@ -269,7 +271,7 @@ class _OPTIONAL_PresidioPIIMasking(CustomGuardrail):
         Raise an exception if blocked entities are detected
         """
         if self.pii_entities_config is None:
-            return
+            raise Exception("Missing PII entities configuration")
 
         if isinstance(analyze_results, Dict):
             # if mock testing is enabled, analyze_results is a dict
