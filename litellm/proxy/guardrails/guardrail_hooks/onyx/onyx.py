@@ -4,19 +4,20 @@
 #                   https://onyx.security/
 #
 # +-------------------------------------------------------------+
-from enum import Enum
 import os
-from typing import TYPE_CHECKING, Any, Optional, Type, Union
 import uuid
+from enum import Enum
+from typing import TYPE_CHECKING, Any, Optional, Type, Union
 
 from fastapi import HTTPException
+
 from litellm._logging import verbose_proxy_logger
+from litellm.caching.caching import DualCache
+from litellm.integrations.custom_guardrail import CustomGuardrail
 from litellm.llms.custom_httpx.http_handler import (
     get_async_httpx_client,
     httpxSpecialProvider,
 )
-from litellm.caching.caching import DualCache
-from litellm.integrations.custom_guardrail import CustomGuardrail
 from litellm.proxy._types import UserAPIKeyAuth
 from litellm.types.utils import CallTypesLiteral, LLMResponseTypes
 
@@ -180,6 +181,11 @@ class OnyxGuardrail(CustomGuardrail):
                 conversation_id=conversation_id,
             )
 
+            response = await self._validate_with_guard_server(
+                payload=payload,
+                hook_type=HookType.POST_CALL,
+                conversation_id=conversation_id,
+            )
             return response
         except HTTPException as e:
             raise e
