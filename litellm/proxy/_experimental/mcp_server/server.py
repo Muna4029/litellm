@@ -310,6 +310,7 @@ if MCP_AVAILABLE:
 
             # Get server-specific auth header if available
             server_auth_header = None
+            server_name = server.server_name  # Ensure server is not None before accessing attributes
             if mcp_server_auth_headers and server.alias is not None:
                 server_auth_header = mcp_server_auth_headers.get(server.alias)
             elif mcp_server_auth_headers and server.server_name is not None:
@@ -543,6 +544,7 @@ if MCP_AVAILABLE:
             set_auth_context(
                 user_api_key_auth=user_api_key_auth,
                 mcp_auth_header=mcp_auth_header,
+                mcp_servers=mcp_servers if mcp_servers is not None else [],  # Ensure mcp_servers is not None
                 mcp_servers=mcp_servers,
                 mcp_server_auth_headers=mcp_server_auth_headers,
             )
