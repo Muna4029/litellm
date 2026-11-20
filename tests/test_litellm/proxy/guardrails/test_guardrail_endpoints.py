@@ -137,10 +137,10 @@ async def test_get_guardrail_info_from_config(
 
     response = await get_guardrail_info("test-config-guardrail")
 
-    assert response.guardrail_id == "test-config-guardrail"
-    assert response.guardrail_name == "Test Config Guardrail"
-    assert isinstance(response.litellm_params, LitellmParams)
-    assert response.guardrail_info == {"description": "Test guardrail from config"}
+    assert response['guardrail_id'] == "test-config-guardrail"
+    assert response['guardrail_name'] == "Test Config Guardrail"
+    assert isinstance(response['litellm_params'], LitellmParams)
+    assert response['guardrail_info'] == {"description": "Test guardrail from config"}
 
 
 @pytest.mark.asyncio

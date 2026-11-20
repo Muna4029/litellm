@@ -60,7 +60,8 @@ class GuardrailItem(BaseModel):
     callback_args: Dict[str, Dict]
     enabled_roles: Optional[List[Role]]
 
-    model_config = ConfigDict(use_enum_values=True)
+    class Config:
+        use_enum_values = True
 
     def __init__(
         self,
@@ -396,7 +397,7 @@ class LitellmParams(
     LassoGuardrailConfigModel,
     BaseLitellmParams,
 ):
-    guardrail: str = Field(description="The type of guardrail integration to use")
+    guardrail: GuardrailItemSpec = Field(description="The type of guardrail integration to use")
     mode: Union[str, List[str]] = Field(
         description="When to apply the guardrail (pre_call, post_call, during_call, logging_only)"
     )
@@ -408,6 +409,8 @@ class LitellmParams(
         else:
             kwargs["default_on"] = False
         super().__init__(**kwargs)
+        if not isinstance(self.guardrail, GuardrailItemSpec):
+            raise ValueError('guardrail must be an instance of GuardrailItemSpec')
 
 
 class Guardrail(TypedDict, total=False):
