@@ -59,6 +59,7 @@ def test_anthropic_sse_wrapper_format():
     wrapper = AnthropicStreamWrapper(
         completion_stream=MockCompletionStream(), model="claude-3"
     )
+    wrapper.pending_new_content_block = []
 
     # Get the first chunk from the SSE wrapper
     first_chunk = next(wrapper.anthropic_sse_wrapper())
