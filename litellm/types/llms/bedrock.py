@@ -513,7 +513,7 @@ class BedrockPreparedRequest(TypedDict):
     endpoint_url: str
     prepped: AWSPreparedRequest
     body: bytes
-    data: dict
+    data: dict[str, Any]
 
 
 class BedrockRerankTextQuery(TypedDict):
