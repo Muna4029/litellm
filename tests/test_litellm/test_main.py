@@ -511,6 +511,7 @@ def test_responses_api_bridge_check_strips_responses_prefix():
             custom_llm_provider="openai",
         )
 
+        mock_get_model_info.assert_called()  
         assert model == "gpt-4-responses"
         assert model_info["mode"] == "responses"
 
@@ -526,6 +527,7 @@ def test_responses_api_bridge_check_handles_exception():
             model="responses/custom-model", custom_llm_provider="custom"
         )
 
+        mock_get_model_info.assert_called()  
         assert model == "custom-model"
         assert model_info["mode"] == "responses"
 
