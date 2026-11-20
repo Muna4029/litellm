@@ -8,7 +8,7 @@ from litellm.proxy._types import MCPAuthType, MCPTransportType
 MCPInfo = Dict[str, Any]
 
 class MCPOAuthMetadata(BaseModel):
-    scopes: Optional[List[str]] = None
+    scopes: List[str] = []
     authorization_url: Optional[str] = None
     token_url: Optional[str] = None
     registration_url: Optional[str] = None
@@ -27,17 +27,13 @@ class MCPServer(BaseModel):
     extra_headers: Optional[
         List[str]
     ] = None  # allow admin to specify which headers to forward from client to the MCP server
-    allowed_tools: Optional[List[str]] = None
-    disallowed_tools: Optional[List[str]] = None
-    allowed_params: Optional[
-        Dict[str, List[str]]
-    ] = None  # map of tool names to allowed parameter lists
-    static_headers: Optional[
-        Dict[str, str]
-    ] = None  # static headers to forward to the MCP server
+    allowed_tools: List[str] = []
+    disallowed_tools: List[str] = []
+    allowed_params: Dict[str, List[str]] = {}
+    static_headers: Dict[str, str] = {}
     # OAuth-specific fields
-    client_id: Optional[str] = None
-    client_secret: Optional[str] = None
+    client_id: str = ""
+    client_secret: str = ""
     scopes: Optional[List[str]] = None
     authorization_url: Optional[str] = None
     token_url: Optional[str] = None
