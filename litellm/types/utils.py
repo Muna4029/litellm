@@ -15,7 +15,7 @@ from typing import (
 )
 
 from aiohttp import FormData
-from openai._models import BaseModel as OpenAIObject
+from openai.models import BaseModel as OpenAIObject
 from openai.types.audio.transcription_create_params import FileTypes  # type: ignore
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.completion_usage import (
@@ -28,7 +28,7 @@ from openai.types.moderation import (
     CategoryAppliedInputTypes,
     CategoryScores,
 )
-from openai.types.moderation_create_response import Moderation, ModerationCreateResponse
+from openai.types.moderation import ModerationCreateResponse
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 from typing_extensions import Callable, Dict, Required, TypedDict, override
 
@@ -588,9 +588,8 @@ ChatCompletionMessage(content='This is a test', role='assistant', function_call=
 def add_provider_specific_fields(
     object: BaseModel, provider_specific_fields: Optional[Dict[str, Any]]
 ):
-    if not provider_specific_fields:  # set if provider_specific_fields is not empty
-        return
-    setattr(object, "provider_specific_fields", provider_specific_fields)
+    if provider_specific_fields:  # set if provider_specific_fields is not empty
+        setattr(object, "provider_specific_fields", provider_specific_fields)
 
 
 class Message(OpenAIObject):
@@ -1207,7 +1206,7 @@ class ModelResponse(ModelResponseBase):
         _response_headers=None,
         **params,
     ) -> None:
-        if stream is not None and stream is True:
+        if stream:
             object = "chat.completion.chunk"
             if choices is not None and isinstance(choices, list):
                 new_choices = []
@@ -1240,18 +1239,11 @@ class ModelResponse(ModelResponseBase):
                 choices = [Choices()]
         if id is None:
             id = _generate_id()
-        else:
-            id = id
         if created is None:
             created = int(time.time())
-        else:
-            created = created
-        model = model
         if usage is not None:
             if isinstance(usage, dict):
                 usage = Usage(**usage)
-            else:
-                usage = usage
         elif stream is None or stream is False:
             usage = Usage()
         if hidden_params:

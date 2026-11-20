@@ -9,7 +9,10 @@ import pytest
 sys.path.insert(
     0, os.path.abspath("../..")
 )  # Adds the parent directory to the system path
-import litellm
+try:
+    import litellm
+except ImportError as e:
+    raise ImportError("Failed to import 'litellm'. Ensure it is installed and available in the PYTHONPATH.") from e
 
 
 @pytest.fixture(scope="function", autouse=True)
