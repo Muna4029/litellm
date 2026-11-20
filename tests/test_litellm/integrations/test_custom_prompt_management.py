@@ -25,6 +25,8 @@ def setup_anthropic_api_key(monkeypatch):
 
 
 class TestCustomPromptManagement(CustomPromptManagement):
+    def __init__(self):
+        super().__init__()
     def get_chat_completion_prompt(
         self,
         model: str,
