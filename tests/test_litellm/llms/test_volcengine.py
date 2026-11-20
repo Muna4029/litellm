@@ -26,6 +26,7 @@ class TestVolcEngineConfig:
         assert mapped_params == {
             "thinking": {"type": "disabled"},
         }
+        assert "extra_body" not in mapped_params
 
         e2e_mapped_params = get_optional_params(
             model="doubao-seed-1.6",
