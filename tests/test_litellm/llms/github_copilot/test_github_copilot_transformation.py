@@ -77,6 +77,7 @@ def test_github_copilot_config_get_openai_compatible_provider_info():
 
 @patch("litellm.llms.github_copilot.authenticator.Authenticator.get_api_key")
 @patch("litellm.llms.openai.openai.OpenAIChatCompletion.completion")
+@patch("litellm.llms.LlmProviders.DIGITALOCEAN")
 def test_completion_github_copilot_mock_response(mock_completion, mock_get_api_key):
     """Test the completion function with GitHub Copilot provider."""
 
