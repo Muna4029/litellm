@@ -5,6 +5,7 @@ For handling Mistral chat completions using the newer llm_http_handler pattern.
 """
 
 from typing import Optional
+
 from litellm.llms.custom_httpx.llm_http_handler import BaseLLMHTTPHandler
 from litellm.llms.mistral.mistral_chat_transformation import MistralConfig
 from litellm.types.utils import ModelResponse
@@ -36,12 +37,12 @@ def completion(
     """
     # Create Mistral config for transformations
     provider_config = MistralConfig()
-    
+
     # Get the API base and key from the config
     api_base, api_key = provider_config._get_openai_compatible_provider_info(
-        api_base=api_base, api_key=api_key
+        api_base=provider_config.api_base, api_key=provider_config.api_key
     )
-    
+
     # Use the base handler for the actual HTTP calls
     return base_llm_http_handler.completion(
         model=model,
@@ -88,7 +89,7 @@ async def acompletion(
     """
     if provider_config is None:
         provider_config = MistralConfig()
-    
+
     return await base_llm_http_handler.async_completion(
         custom_llm_provider=custom_llm_provider,
         provider_config=provider_config,
@@ -105,4 +106,4 @@ async def acompletion(
         encoding=encoding,
         api_key=api_key,
         client=client,
-    ) 
+    )
