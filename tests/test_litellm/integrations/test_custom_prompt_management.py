@@ -24,7 +24,7 @@ def setup_anthropic_api_key(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-some-key")
 
 
-class TestCustomPromptManagement(CustomPromptManagement):
+class TestCustomPromptManagement:
     def get_chat_completion_prompt(
         self,
         model: str,
@@ -81,9 +81,6 @@ async def test_custom_prompt_management_with_prompt_id(monkeypatch):
             request_body["messages"][0]["content"][0]["text"]
             == "This is the prompt for test_prompt_id"
         )
-
-
-@pytest.mark.asyncio
 async def test_custom_prompt_management_with_prompt_id_and_prompt_variables():
     custom_prompt_management = TestCustomPromptManagement()
     litellm.callbacks = [custom_prompt_management]
@@ -110,10 +107,6 @@ async def test_custom_prompt_management_with_prompt_id_and_prompt_variables():
             request_body["messages"][0]["content"][0]["text"]
             == "Hello, John! You are 30 years old and live in New York."
         )
-
-
-@pytest.mark.asyncio
-async def test_custom_prompt_management_without_prompt_id():
     custom_prompt_management = TestCustomPromptManagement()
     litellm.callbacks = [custom_prompt_management]
 

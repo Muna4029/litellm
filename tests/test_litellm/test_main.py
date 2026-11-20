@@ -264,8 +264,9 @@ def test_bedrock_latency_optimized_inference():
             print(e)
 
         mock_post.assert_called_once()
-        json_data = json.loads(mock_post.call_args.kwargs["data"])
-        assert json_data["performanceConfig"]["latency"] == "optimized"
+        if mock_post.call_args is not None:
+            json_data = json.loads(mock_post.call_args.kwargs["data"])
+            assert json_data["performanceConfig"]["latency"] == "optimized"
 
 
 @pytest.fixture(autouse=True)

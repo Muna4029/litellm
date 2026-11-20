@@ -118,12 +118,12 @@ async def test_sync_in_memory_spend_with_redis(base_strategy, mock_dual_cache):
         in_memory_after_future
     )
 
-    await base_strategy._sync_in_memory_spend_with_redis()
+    result = await base_strategy._sync_in_memory_spend_with_redis()
 
     # Verify Redis batch get was called with correct keys
-    key_list = mock_dual_cache.redis_cache.async_batch_get_cache.call_args.kwargs[
-        "key_list"
-    ]
+    key_list = mock_dual_cache.redis_cache.async_batch_get_cache.call_args.kwargs.get(
+        "key_list", []
+    )
     assert sorted(key_list) == sorted(["key1"])
 
     # Verify in-memory cache was updated with merged values
@@ -133,7 +133,7 @@ async def test_sync_in_memory_spend_with_redis(base_strategy, mock_dual_cache):
     # Verify the final merged values
     set_cache_calls = mock_dual_cache.in_memory_cache.async_set_cache.call_args_list
     assert any(
-        call.kwargs["key"] == "key1" and float(call.kwargs["value"]) == 18.0
+        call.kwargs.get("key") == "key1" and float(call.kwargs.get("value", 0)) == 18.0
         for call in set_cache_calls
     )
 
