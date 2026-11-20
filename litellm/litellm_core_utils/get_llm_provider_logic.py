@@ -220,7 +220,8 @@ def get_llm_provider(  # noqa: PLR0915
                         dynamic_api_key = api_key or get_secret_str("LLAMA_API_KEY")
                     elif endpoint == "https://api.featherless.ai/v1":
                         custom_llm_provider = "featherless_ai"
-                        dynamic_api_key = get_secret_str("FEATHERLESS_AI_API_KEY")                    elif endpoint == litellm.NscaleConfig.API_BASE_URL:
+                        dynamic_api_key = get_secret_str("FEATHERLESS_AI_API_KEY")
+                    elif endpoint == litellm.NscaleConfig.API_BASE_URL:
                         custom_llm_provider = "nscale"
                         dynamic_api_key = litellm.NscaleConfig.get_api_key()
 
