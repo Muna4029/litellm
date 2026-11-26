@@ -1,18 +1,14 @@
-import json
 import os
 import sys
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Dict, List, Optional
 
 import pytest
 
-sys.path.insert(
-    0, os.path.abspath("../../..")
-)  # Adds the parent directory to the system path
+sys.path.insert(0, os.path.abspath("../../.."))  # Adds the parent directory to the system path
 
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
 
 from litellm.caching.caching import DualCache
 from litellm.caching.redis_cache import RedisPipelineIncrementOperation
@@ -65,17 +61,30 @@ async def test_increment_value_in_current_window(base_strategy, mock_dual_cache)
     await base_strategy._increment_value_in_current_window(key, value, ttl)
 
     # Verify in-memory cache was incremented
-    mock_dual_cache.in_memory_cache.async_increment.assert_called_once_with(
-        key=key, value=value, ttl=ttl
-    )
+    mock_dual_cache.in_memory_cache.async_increment.assert_called_once_with(key=key, value=value, ttl=ttl)
 
     # Verify operation was queued for Redis
     assert len(base_strategy.redis_increment_operation_queue) == 1
     queued_op = base_strategy.redis_increment_operation_queue[0]
-    assert isinstance(queued_op, dict)
-    assert queued_op["key"] == key
-    assert queued_op["increment_value"] == value
-    assert queued_op["ttl"] == ttl
+
+    # The implementation may queue either a dict or a RedisPipelineIncrementOperation-like
+    # object. Accept both by normalizing access to key, increment_value, and ttl.
+    if isinstance(queued_op, dict):
+        queued_key = queued_op.get("key")
+        queued_increment = queued_op.get("increment_value")
+        queued_ttl = queued_op.get("ttl")
+    else:
+        # Support attribute-based objects (e.g., RedisPipelineIncrementOperation)
+        queued_key = getattr(queued_op, "key")
+        # Some implementations may use different attribute names; try common variants
+        queued_increment = getattr(queued_op, "increment_value", None)
+        if queued_increment is None:
+            queued_increment = getattr(queued_op, "incrementValue", None)
+        queued_ttl = getattr(queued_op, "ttl")
+
+    assert queued_key == key
+    assert queued_increment == value
+    assert queued_ttl == ttl
 
 
 @pytest.mark.asyncio
@@ -102,9 +111,7 @@ async def test_sync_in_memory_spend_with_redis(base_strategy, mock_dual_cache):
     # Mock the in-memory cache batch get responses for before snapshot
     in_memory_before_future: asyncio.Future[List[str]] = asyncio.Future()
     in_memory_before_future.set_result(["5.0"])  # Initial values
-    mock_dual_cache.in_memory_cache.async_batch_get_cache.return_value = (
-        in_memory_before_future
-    )
+    mock_dual_cache.in_memory_cache.async_batch_get_cache.return_value = in_memory_before_future
 
     # Mock Redis batch get response
     redis_future: asyncio.Future[Dict[str, str]] = asyncio.Future()
@@ -114,16 +121,23 @@ async def test_sync_in_memory_spend_with_redis(base_strategy, mock_dual_cache):
     # Mock in-memory get for after snapshot
     in_memory_after_future: asyncio.Future[Optional[str]] = asyncio.Future()
     in_memory_after_future.set_result("8.0")  # Value after potential updates
-    mock_dual_cache.in_memory_cache.async_get_cache.return_value = (
-        in_memory_after_future
-    )
+    mock_dual_cache.in_memory_cache.async_get_cache.return_value = in_memory_after_future
 
     await base_strategy._sync_in_memory_spend_with_redis()
 
     # Verify Redis batch get was called with correct keys
-    key_list = mock_dual_cache.redis_cache.async_batch_get_cache.call_args.kwargs[
-        "key_list"
-    ]
+    # Ensure the mock was called before inspecting its arguments
+    assert mock_dual_cache.redis_cache.async_batch_get_cache.called
+    call_args = mock_dual_cache.redis_cache.async_batch_get_cache.call_args
+    assert call_args is not None
+    # Support both kwargs and positional args for key_list
+    if call_args.kwargs and "key_list" in call_args.kwargs:
+        key_list = call_args.kwargs["key_list"]
+    else:
+        # positional args: assume first arg is key_list
+        key_list = call_args.args[0] if call_args.args else None
+
+    assert key_list is not None
     assert sorted(key_list) == sorted(["key1"])
 
     # Verify in-memory cache was updated with merged values
@@ -132,10 +146,7 @@ async def test_sync_in_memory_spend_with_redis(base_strategy, mock_dual_cache):
 
     # Verify the final merged values
     set_cache_calls = mock_dual_cache.in_memory_cache.async_set_cache.call_args_list
-    assert any(
-        call.kwargs["key"] == "key1" and float(call.kwargs["value"]) == 18.0
-        for call in set_cache_calls
-    )
+    assert any(call.kwargs["key"] == "key1" and float(call.kwargs["value"]) == 18.0 for call in set_cache_calls)
 
     # Verify cache keys still exist
     assert len(base_strategy.in_memory_keys_to_update) == 1

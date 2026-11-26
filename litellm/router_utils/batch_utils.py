@@ -20,42 +20,76 @@ def should_replace_model_in_jsonl(
 
     Azure raises an error on create batch if the model name for deployment is not in the .jsonl.
     """
-    if purpose == "batch":
-        return True
-    return False
+    # Accept enums, strings, or objects with name/value attributes. Normalize to string
+    try:
+        if hasattr(purpose, "value"):
+            val = purpose.value
+        elif hasattr(purpose, "name"):
+            val = purpose.name
+        else:
+            val = str(purpose)
+        return str(val).lower() == "batch"
+    except Exception:
+        return False
 
 
 def replace_model_in_jsonl(file_content: FileTypes, new_model_name: str) -> FileTypes:
     try:
-        ## if pathlike, return the original file content
-        if isinstance(file_content, PathLike):
-            return file_content
+        original_name: str | None = None
 
-        # Decode the bytes to a string and split into lines
-        # If file_content is a file-like object, read the bytes
-        if hasattr(file_content, "read"):
+        # If given a path (str or PathLike), read the file bytes
+        if isinstance(file_content, PathLike) or isinstance(file_content, str):
+            path_str = str(file_content)
+            # derive a file name without importing os
+            original_name = path_str.replace("\\", "/").split("/")[-1] or "modified_file.jsonl"
+            with open(path_str, "rb") as f:
+                file_content_bytes = f.read()
+
+        # If file-like object, read bytes and try to preserve the original name
+        elif hasattr(file_content, "read"):
+            original_name = getattr(file_content, "name", None)
+            # read and then reset stream position if possible
             file_content_bytes = file_content.read()  # type: ignore
+            try:
+                if hasattr(file_content, "seek"):
+                    file_content.seek(0)
+            except Exception:
+                pass
+
+        # If tuple, expect (name, bytes_or_fileobj)
         elif isinstance(file_content, tuple):
-            file_content_bytes = file_content[1]
+            if len(file_content) >= 2:
+                original_name = str(file_content[0])
+                payload = file_content[1]
+                if hasattr(payload, "read"):
+                    file_content_bytes = payload.read()
+                else:
+                    file_content_bytes = payload
+            else:
+                return file_content
+
         else:
             file_content_bytes = file_content
 
-        # Decode the bytes to a string and split into lines
+        # Decode the bytes to a string
         if isinstance(file_content_bytes, bytes):
             file_content_str = file_content_bytes.decode("utf-8")
         elif isinstance(file_content_bytes, str):
             file_content_str = file_content_bytes
         else:
+            # Unknown type: don't attempt to modify
             return file_content
 
         lines = file_content_str.splitlines()
         modified_lines = []
         for line in lines:
             # Parse each line as a JSON object
+            if not line.strip():
+                continue
             json_object = json.loads(line.strip())
 
             # Replace the model name if it exists
-            if "body" in json_object:
+            if "body" in json_object and isinstance(json_object["body"], dict):
                 json_object["body"]["model"] = new_model_name
 
             # Convert the modified JSON object back to a string
@@ -63,9 +97,15 @@ def replace_model_in_jsonl(file_content: FileTypes, new_model_name: str) -> File
 
         # Reassemble the modified lines and return as bytes
         modified_file_content = "\n".join(modified_lines).encode("utf-8")
-        return InMemoryFile(modified_file_content, name="modified_file.jsonl")  # type: ignore
 
-    except (json.JSONDecodeError, UnicodeDecodeError, TypeError):
+        # Preserve return shape: if input was a tuple, return (name, bytes)
+        if isinstance(file_content, tuple):
+            return (original_name or "modified_file.jsonl", modified_file_content)
+
+        # For path/str/file-like inputs, return an InMemoryFile with the original name if available
+        return InMemoryFile(modified_file_content, name=(original_name or "modified_file.jsonl"))  # type: ignore
+
+    except (json.JSONDecodeError, UnicodeDecodeError):
         # return the original file content if there is an error replacing the model name
         return file_content
 

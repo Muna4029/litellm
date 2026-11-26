@@ -5,11 +5,8 @@ import sys
 import httpx
 import pytest
 import respx
-from fastapi.testclient import TestClient
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
+sys.path.insert(0, os.path.abspath("../.."))  # Adds the parent directory to the system path
 
 import urllib.parse
 from unittest.mock import MagicMock, patch
@@ -85,9 +82,7 @@ def test_completion_missing_role(openai_api_response):
 
     print(f"openai_api_response: {openai_api_response}")
 
-    with patch.object(
-        client.chat.completions.with_raw_response, "create", mock_raw_response
-    ) as mock_create:
+    with patch.object(client.chat.completions.with_raw_response, "create", mock_raw_response) as mock_create:
         litellm.completion(
             model="gpt-4o-mini",
             messages=[
@@ -146,6 +141,44 @@ async def test_url_with_format_param(model, sync_mode, monkeypatch):
     from litellm import acompletion, completion
     from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler, HTTPHandler
 
+    # Ensure any external image fetch is mocked so test does not perform network I/O.
+    class DummyResp:
+        def __init__(self, content=b"\x89PNG\r\n", status_code=200, headers=None):
+            self.content = content
+            self.status_code = status_code
+            self.headers = headers or {"content-type": "image/png"}
+
+        def read(self):
+            return self.content
+
+    def fake_requests_get(url, *args, **kwargs):
+        return DummyResp()
+
+    async def fake_httpx_get(url, *args, **kwargs):
+        return DummyResp()
+
+    def fake_urlopen(url, *args, **kwargs):
+        return DummyResp()
+
+    # Patch common fetch entrypoints used by image handling code
+    monkeypatch.setattr("requests.get", fake_requests_get, raising=False)
+    monkeypatch.setattr("httpx.get", fake_httpx_get, raising=False)
+    # Patch AsyncClient.get if httpx is used via AsyncClient
+    try:
+        import httpx
+
+        monkeypatch.setattr(
+            httpx.AsyncClient, "get", lambda self, url, *a, **k: fake_httpx_get(url, *a, **k), raising=False
+        )
+    except Exception:
+        pass
+    try:
+        import urllib.request
+
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen, raising=False)
+    except Exception:
+        pass
+
     if sync_mode:
         client = HTTPHandler()
     else:
@@ -176,7 +209,7 @@ async def test_url_with_format_param(model, sync_mode, monkeypatch):
             else:
                 response = await acompletion(**args, client=client)
             print(response)
-        except Exception as e:
+        except Exception:
             pass
 
         mock_client.assert_called()
@@ -199,10 +232,46 @@ async def test_url_with_format_param(model, sync_mode, monkeypatch):
 @pytest.mark.parametrize("model", ["gpt-4o-mini"])
 @pytest.mark.parametrize("sync_mode", [True, False])
 @pytest.mark.asyncio
-async def test_url_with_format_param_openai(model, sync_mode):
+async def test_url_with_format_param_openai(model, sync_mode, monkeypatch):
     from openai import AsyncOpenAI, OpenAI
 
     from litellm import acompletion, completion
+
+    # Mock external image fetching to avoid real network calls in tests
+    class DummyResp:
+        def __init__(self, content=b"\x89PNG\r\n", status_code=200, headers=None):
+            self.content = content
+            self.status_code = status_code
+            self.headers = headers or {"content-type": "image/png"}
+
+        def read(self):
+            return self.content
+
+    def fake_requests_get(url, *args, **kwargs):
+        return DummyResp()
+
+    async def fake_httpx_get(url, *args, **kwargs):
+        return DummyResp()
+
+    def fake_urlopen(url, *args, **kwargs):
+        return DummyResp()
+
+    monkeypatch.setattr("requests.get", fake_requests_get, raising=False)
+    monkeypatch.setattr("httpx.get", fake_httpx_get, raising=False)
+    try:
+        import httpx
+
+        monkeypatch.setattr(
+            httpx.AsyncClient, "get", lambda self, url, *a, **k: fake_httpx_get(url, *a, **k), raising=False
+        )
+    except Exception:
+        pass
+    try:
+        import urllib.request
+
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen, raising=False)
+    except Exception:
+        pass
 
     if sync_mode:
         client = OpenAI()
@@ -227,9 +296,7 @@ async def test_url_with_format_param_openai(model, sync_mode):
             }
         ],
     }
-    with patch.object(
-        client.chat.completions.with_raw_response, "create"
-    ) as mock_client:
+    with patch.object(client.chat.completions.with_raw_response, "create") as mock_client:
         try:
             if sync_mode:
                 response = completion(**args, client=client)
@@ -280,9 +347,7 @@ def set_openrouter_api_key():
 
 
 @pytest.mark.asyncio
-async def test_extra_body_with_fallback(
-    respx_mock: respx.MockRouter, set_openrouter_api_key
-):
+async def test_extra_body_with_fallback(respx_mock: respx.MockRouter, set_openrouter_api_key):
     """
     test regression for https://github.com/BerriAI/litellm/issues/8425.
 
@@ -352,9 +417,7 @@ async def test_extra_body_with_fallback(
 
 @pytest.mark.parametrize("env_base", ["OPENAI_BASE_URL", "OPENAI_API_BASE"])
 @pytest.mark.asyncio
-async def test_openai_env_base(
-    respx_mock: respx.MockRouter, env_base, openai_api_response, monkeypatch
-):
+async def test_openai_env_base(respx_mock: respx.MockRouter, env_base, openai_api_response, monkeypatch):
     "This tests OpenAI env variables are honored, including legacy OPENAI_API_BASE"
     litellm.disable_aiohttp_transport = True
 
