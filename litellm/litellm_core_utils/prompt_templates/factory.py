@@ -4,7 +4,8 @@ import re
 import uuid
 import xml.etree.ElementTree as ET
 from enum import Enum
-from typing import Any, List, Literal, Optional, Tuple, Union, cast, overload
+from typing import Any, List, Optional, Tuple, Union, cast, overload
+from typing_extensions import Literal
 
 from jinja2.sandbox import ImmutableSandboxedEnvironment
 
@@ -206,10 +207,13 @@ def ollama_pt(
                 if isinstance(msg_content, list):
                     for m in msg_content:
                         if m.get("type", "") == "image_url":
+                            # Normalize image entries to dicts with a url key so the images
+                            # list has a consistent element type for OllamaVisionModelObject
                             if isinstance(m["image_url"], str):
-                                images.append(m["image_url"])
+                                images.append({"url": m["image_url"]})
                             elif isinstance(m["image_url"], dict):
-                                images.append(m["image_url"]["url"])
+                                # accept already-structured dicts
+                                images.append(m["image_url"])
                         elif m.get("type", "") == "text":
                             user_content_str += m["text"]
                 else:
@@ -469,7 +473,7 @@ def hf_chat_template(  # noqa: PLR0915
             except Exception as e:
                 if "Conversation roles must alternate user/assistant" in str(e):
                     # reformat messages to ensure user/assistant are alternating, if there's either 2 consecutive 'user' messages or 2 consecutive 'assistant' message, add a blank 'user' or 'assistant' message to ensure compatibility
-                    new_messages = []
+                    new_messages: List[dict] = []
                     for i in range(len(reformatted_messages) - 1):
                         new_messages.append(reformatted_messages[i])
                         if (
@@ -1125,7 +1129,7 @@ def convert_to_gemini_tool_call_result(
     content_str: str = ""
     if isinstance(message["content"], str):
         content_str = message["content"]
-    elif isinstance(message["content"], List):
+    elif isinstance(message["content"], list):
         content_list = message["content"]
         for content in content_list:
             if content["type"] == "text":
@@ -1513,7 +1517,7 @@ def anthropic_messages_pt(  # noqa: PLR0915
 ) -> List[
     Union[
         AnthropicMessagesUserMessageParam,
-        AnthopicMessagesAssistantMessageParam,
+        AnthropicMessagesAssistantMessageParam,
     ]
 ]:
     """
@@ -1531,7 +1535,7 @@ def anthropic_messages_pt(  # noqa: PLR0915
     new_messages: List[
         Union[
             AnthropicMessagesUserMessageParam,
-            AnthopicMessagesAssistantMessageParam,
+            AnthropicMessagesAssistantMessageParam,
         ]
     ] = []
 
@@ -1878,7 +1882,7 @@ def convert_openai_message_to_cohere_tool_result(
     content_str: str = ""
     if isinstance(message["content"], str):
         content_str = message["content"]
-    elif isinstance(message["content"], List):
+    elif isinstance(message["content"], list):
         content_list = message["content"]
         for content in content_list:
             if content["type"] == "text":
@@ -3057,8 +3061,8 @@ class BedrockConverseMessagesProcessor:
         assistant_continue_message: Optional[
             Union[str, ChatCompletionAssistantMessage]
         ] = None,
-    ) -> List[BedrockMessageBlock]:
-        contents: List[BedrockMessageBlock] = []
+    ) -> List[Any]:
+        contents: List[Any] = []
         msg_i = 0
 
         ## BASE CASE ##
@@ -3587,7 +3591,7 @@ def _bedrock_converse_messages_pt(  # noqa: PLR0915
     return contents
 
 
-def make_valid_bedrock_tool_name(input_tool_name: str) -> str:
+def make_valid_bedrock_tool_name(input_tool_name: Optional[str]) -> Optional[str]:
     """
     Replaces any invalid characters in the input tool name with underscores
     and ensures the resulting string is a valid identifier for Bedrock tools
