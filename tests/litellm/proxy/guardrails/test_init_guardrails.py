@@ -1,13 +1,8 @@
-import json
 import os
 import sys
-from unittest.mock import MagicMock, patch
 
-import pytest
 
-sys.path.insert(
-    0, os.path.abspath("../../..")
-)  # Adds the parent directory to the system path
+sys.path.insert(0, os.path.abspath("../../.."))  # Adds the parent directory to the system path
 
 from litellm.proxy.guardrails.init_guardrails import InitializeGuardrails
 from litellm.types.guardrails import SupportedGuardrailIntegrations
@@ -18,6 +13,12 @@ def test_initialize_presidio_guardrail():
     Test that initialize_guardrail correctly uses registered initializers
     for presidio guardrail
     """
+    import os
+
+    # Ensure environment variables required by the Presidio initializer are set
+    os.environ["PRESIDIO_ANALYZER_API_BASE"] = "https://fakelink.com/v1/presidio/analyze"
+    os.environ["PRESIDIO_ANONYMIZER_API_BASE"] = "https://fakelink.com/v1/presidio/anonymize"
+
     # Setup test data for a non-custom guardrail (using Presidio as an example)
     test_guardrail = {
         "guardrail_name": "test_presidio_guardrail",
@@ -35,8 +36,6 @@ def test_initialize_presidio_guardrail():
     )
 
     assert result["guardrail_name"] == "test_presidio_guardrail"
-    assert (
-        result["litellm_params"].guardrail
-        == SupportedGuardrailIntegrations.PRESIDIO.value
-    )
-    assert result["litellm_params"].mode == "pre_call"
+    # litellm_params is a dict; use key access rather than attribute access
+    assert result["litellm_params"]["guardrail"] == SupportedGuardrailIntegrations.PRESIDIO.value
+    assert result["litellm_params"]["mode"] == "pre_call"

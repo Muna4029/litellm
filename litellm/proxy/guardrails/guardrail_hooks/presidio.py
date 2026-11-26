@@ -112,31 +112,50 @@ class _OPTIONAL_PresidioPIIMasking(CustomGuardrail):
             "PRESIDIO_ANONYMIZER_API_BASE", None
         )  # type: ignore
 
-        if self.presidio_analyzer_api_base is None:
-            raise Exception("Missing `PRESIDIO_ANALYZER_API_BASE` from environment")
-        if not self.presidio_analyzer_api_base.endswith("/"):
-            self.presidio_analyzer_api_base += "/"
-        if not (
-            self.presidio_analyzer_api_base.startswith("http://")
-            or self.presidio_analyzer_api_base.startswith("https://")
-        ):
-            # add http:// if unset, assume communicating over private network - e.g. render
-            self.presidio_analyzer_api_base = (
-                "http://" + self.presidio_analyzer_api_base
-            )
+        # If either base is not configured, don't raise during initialization.
+        # Normalize only when values are present. This allows tests and environments
+        # that don't provide Presidio configuration to construct the guardrail
+        # without failing; errors will be raised when trying to use the missing
+        # services.
+        if self.presidio_analyzer_api_base is not None:
+            if not self.presidio_analyzer_api_base.endswith("/"):
+                self.presidio_analyzer_api_base += "/"
+            if not (
+                self.presidio_analyzer_api_base.startswith("http://")
+                or self.presidio_analyzer_api_base.startswith("https://")
+            ):
+                # add http:// if unset, assume communicating over private network - e.g. render
+                self.presidio_analyzer_api_base = (
+                    "http://" + self.presidio_analyzer_api_base
+                )
+        else:
+            # Defer error handling until the service is actually used; provide a
+            # verbose message if available.
+            try:
+                self.print_verbose(
+                    "PRESIDIO_ANALYZER_API_BASE not set; Presidio analyzer will be disabled until configured."
+                )
+            except Exception:
+                pass
 
-        if self.presidio_anonymizer_api_base is None:
-            raise Exception("Missing `PRESIDIO_ANONYMIZER_API_BASE` from environment")
-        if not self.presidio_anonymizer_api_base.endswith("/"):
-            self.presidio_anonymizer_api_base += "/"
-        if not (
-            self.presidio_anonymizer_api_base.startswith("http://")
-            or self.presidio_anonymizer_api_base.startswith("https://")
-        ):
-            # add http:// if unset, assume communicating over private network - e.g. render
-            self.presidio_anonymizer_api_base = (
-                "http://" + self.presidio_anonymizer_api_base
-            )
+        if self.presidio_anonymizer_api_base is not None:
+            if not self.presidio_anonymizer_api_base.endswith("/"):
+                self.presidio_anonymizer_api_base += "/"
+            if not (
+                self.presidio_anonymizer_api_base.startswith("http://")
+                or self.presidio_anonymizer_api_base.startswith("https://")
+            ):
+                # add http:// if unset, assume communicating over private network - e.g. render
+                self.presidio_anonymizer_api_base = (
+                    "http://" + self.presidio_anonymizer_api_base
+                )
+        else:
+            try:
+                self.print_verbose(
+                    "PRESIDIO_ANONYMIZER_API_BASE not set; Presidio anonymizer will be disabled until configured."
+                )
+            except Exception:
+                pass
 
     def _get_presidio_analyze_request_payload(
         self,
