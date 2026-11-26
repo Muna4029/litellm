@@ -562,49 +562,81 @@ def _count_content_list(
     """
     Get the number of tokens from a list of content.
     """
-    try:
-        num_tokens = 0
-        for c in content_list:
-            if isinstance(c, str):
-                num_tokens += count_function(c)
-            elif c["type"] == "text":
-                num_tokens += count_function(c["text"])
-            elif c["type"] == "image_url":
-                if isinstance(c["image_url"], dict):
-                    image_url_dict = c["image_url"]
-                    detail = image_url_dict.get("detail", "auto")
-                    if detail not in ["low", "high", "auto"]:
-                        raise ValueError(
-                            f"Invalid detail value: {detail}. Expected 'low', 'high', or 'auto'."
-                        )
-                    url = image_url_dict.get("url")
-                    num_tokens += calculate_img_tokens(
-                        data=url,
-                        mode=detail,  # type: ignore
-                        use_default_image_token_count=use_default_image_token_count,
-                    )
-                elif isinstance(c["image_url"], str):
-                    image_url_str = c["image_url"]
-                    num_tokens += calculate_img_tokens(
-                        data=image_url_str,
-                        mode="auto",
-                        use_default_image_token_count=use_default_image_token_count,
-                    )
-                else:
+    num_tokens = 0
+    for c in content_list:
+        # Strings are treated as plain text
+        if isinstance(c, str):
+            num_tokens += count_function(c)
+            continue
+
+        # Expect a dict for structured content
+        if not isinstance(c, dict):
+            raise ValueError(f"Invalid content type: {type(c)}. Expected str or dict.")
+
+        # Require a 'type' key in the dict
+        if "type" not in c:
+            raise ValueError(f"Missing 'type' key in content dict: {c}")
+
+        content_type = c["type"]
+
+        if content_type == "text":
+            text_val = c.get("text")
+            if not isinstance(text_val, str):
+                raise ValueError(f"Invalid or missing 'text' value for text content: {text_val}")
+            num_tokens += count_function(text_val)
+
+        elif content_type == "image_url":
+            if "image_url" not in c:
+                raise ValueError("Missing 'image_url' key in image content")
+
+            image_url_field = c["image_url"]
+
+            # Handle dict form: {"url": "...", "detail": "auto|low|high"}
+            if isinstance(image_url_field, dict):
+                image_url_dict = image_url_field
+                detail = image_url_dict.get("detail", "auto")
+                if detail not in ["low", "high", "auto"]:
                     raise ValueError(
-                        f"Invalid image_url type: {type(c['image_url'])}. Expected str or dict."
+                        f"Invalid detail value: {detail}. Expected 'low', 'high', or 'auto'."
                     )
+                url = image_url_dict.get("url")
+                if not isinstance(url, str) or not url.strip():
+                    # Use default per-image token count if allowed and provided
+                    if use_default_image_token_count and default_token_count is not None:
+                        num_tokens += default_token_count
+                        continue
+                    raise ValueError(f"Invalid or missing image URL in image content: {image_url_dict}")
+
+                num_tokens += calculate_img_tokens(
+                    data=url,
+                    mode=detail,  # type: ignore
+                    use_default_image_token_count=use_default_image_token_count,
+                )
+
+            # Handle simple string URL
+            elif isinstance(image_url_field, str):
+                image_url_str = image_url_field
+                if not image_url_str.strip():
+                    if use_default_image_token_count and default_token_count is not None:
+                        num_tokens += default_token_count
+                        continue
+                    raise ValueError(f"Invalid or empty image URL string: {image_url_str}")
+
+                num_tokens += calculate_img_tokens(
+                    data=image_url_str,
+                    mode="auto",
+                    use_default_image_token_count=use_default_image_token_count,
+                )
+
             else:
                 raise ValueError(
-                    f"Invalid content type: {type(c)}. Expected str or dict."
+                    f"Invalid image_url type: {type(image_url_field)}. Expected str or dict."
                 )
-        return num_tokens
-    except Exception as e:
-        if default_token_count is not None:
-            return default_token_count
-        raise ValueError(
-            f"Error getting number of tokens from content list: {e}, default_token_count={default_token_count}"
-        )
+
+        else:
+            raise ValueError(f"Invalid content 'type': {content_type}. Expected 'text' or 'image_url'.")
+
+    return num_tokens
 
 
 def _format_function_definitions(tools):

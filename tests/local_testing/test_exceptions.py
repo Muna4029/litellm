@@ -1,6 +1,5 @@
 import asyncio
 import os
-import subprocess
 import sys
 import traceback
 from typing import Any
@@ -9,10 +8,7 @@ from openai import AuthenticationError, BadRequestError, OpenAIError, RateLimitE
 
 from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler, HTTPHandler
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system path
-from concurrent.futures import ThreadPoolExecutor
+sys.path.insert(0, os.path.abspath("../.."))  # Adds the parent directory to the system path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -21,7 +17,6 @@ import litellm
 from litellm import (  # AuthenticationError,; RateLimitError,; ServiceUnavailableError,; OpenAIError,
     ContextWindowExceededError,
     completion,
-    embedding,
 )
 
 litellm.vertex_project = "pathrise-convert-1606954137718"
@@ -76,9 +71,7 @@ async def test_content_policy_exception_openai():
         response = await litellm.acompletion(
             model="gpt-3.5-turbo",
             stream=True,
-            messages=[
-                {"role": "user", "content": "Gimme the lyrics to Don't Stop Me Now"}
-            ],
+            messages=[{"role": "user", "content": "Gimme the lyrics to Don't Stop Me Now"}],
         )
         async for chunk in response:
             print(chunk)
@@ -105,9 +98,9 @@ def test_context_window(model):
         response = completion(model=model, messages=messages)
         print(f"response: {response}")
         print("FAILED!")
-        pytest.fail(f"An exception occurred")
-    except ContextWindowExceededError as e:
-        print(f"Worked!")
+        pytest.fail("An exception occurred")
+    except ContextWindowExceededError:
+        print("Worked!")
     except RateLimitError:
         print("RateLimited!")
     except Exception as e:
@@ -135,9 +128,9 @@ def test_context_window_with_fallbacks(model):
             messages=messages,
             context_window_fallback_dict=ctx_window_fallback_dict,
         )
-    except litellm.ServiceUnavailableError as e:
+    except litellm.ServiceUnavailableError:
         pass
-    except litellm.APIConnectionError as e:
+    except litellm.APIConnectionError:
         pass
 
 
@@ -175,9 +168,7 @@ def invalid_auth(model):  # set the model key to an invalid key, depending on th
             os.environ["AI21_API_KEY"] = "bad-key"
         elif "togethercomputer" in model:
             temporary_key = os.environ["TOGETHERAI_API_KEY"]
-            os.environ["TOGETHERAI_API_KEY"] = (
-                "84060c79880fc49df126d3e87b53f8a463ff6e1c6d27fe64207cde25cdfcd1f24a"
-            )
+            os.environ["TOGETHERAI_API_KEY"] = "84060c79880fc49df126d3e87b53f8a463ff6e1c6d27fe64207cde25cdfcd1f24a"
         elif model in litellm.openrouter_models:
             temporary_key = os.environ["OPENROUTER_API_KEY"]
             os.environ["OPENROUTER_API_KEY"] = "bad-key"
@@ -187,10 +178,7 @@ def invalid_auth(model):  # set the model key to an invalid key, depending on th
         elif model in litellm.nlp_cloud_models:
             temporary_key = os.environ["NLP_CLOUD_API_KEY"]
             os.environ["NLP_CLOUD_API_KEY"] = "bad-key"
-        elif (
-            model
-            == "replicate/llama-2-70b-chat:2c1608e18606fad2812020dc541930f2d0495ce32eee50074220b87300bc16e1"
-        ):
+        elif model == "replicate/llama-2-70b-chat:2c1608e18606fad2812020dc541930f2d0495ce32eee50074220b87300bc16e1":
             temporary_key = os.environ["REPLICATE_API_KEY"]
             os.environ["REPLICATE_API_KEY"] = "bad-key"
         print(f"model: {model}")
@@ -198,9 +186,7 @@ def invalid_auth(model):  # set the model key to an invalid key, depending on th
         print(f"response: {response}")
     except AuthenticationError as e:
         print(f"AuthenticationError Caught Exception - {str(e)}")
-    except (
-        OpenAIError
-    ) as e:  # is at least an openai error -> in case of random model errors - e.g. overloaded server
+    except OpenAIError as e:  # is at least an openai error -> in case of random model errors - e.g. overloaded server
         print(f"OpenAIError Caught Exception - {e}")
     except Exception as e:
         print(type(e))
@@ -218,10 +204,7 @@ def invalid_auth(model):  # set the model key to an invalid key, depending on th
             os.environ["ANTHROPIC_API_KEY"] = temporary_key
         elif model == "command-nightly":
             os.environ["COHERE_API_KEY"] = temporary_key
-        elif (
-            model
-            == "replicate/llama-2-70b-chat:2c1608e18606fad2812020dc541930f2d0495ce32eee50074220b87300bc16e1"
-        ):
+        elif model == "replicate/llama-2-70b-chat:2c1608e18606fad2812020dc541930f2d0495ce32eee50074220b87300bc16e1":
             os.environ["REPLICATE_API_KEY"] = temporary_key
         elif "j2" in model:
             os.environ["AI21_API_KEY"] = temporary_key
@@ -268,7 +251,7 @@ def test_completion_azure_exception():
         os.environ["AZURE_API_KEY"] = old_azure_key
         print(f"response: {response}")
         print(response)
-    except openai.AuthenticationError as e:
+    except openai.AuthenticationError:
         os.environ["AZURE_API_KEY"] = old_azure_key
         print("good job got the correct error for azure when key not set")
     except Exception as e:
@@ -280,7 +263,6 @@ def test_completion_azure_exception():
 
 def test_azure_embedding_exceptions():
     try:
-
         response = litellm.embedding(
             model="azure/azure-embedding-model",
             input="hello",
@@ -404,7 +386,7 @@ def test_completion_openai_exception():
         )
         print(f"response: {response}")
         print(response)
-    except openai.AuthenticationError as e:
+    except openai.AuthenticationError:
         os.environ["OPENAI_API_KEY"] = old_azure_key
         print("OpenAI: good job got the correct error for openai when key not set")
     except Exception as e:
@@ -434,9 +416,7 @@ def test_anthropic_openai_exception():
             "Missing Anthropic API Key - A call is being made to anthropic but no key is set either in the environment variables or via params"
             in e.message
         )
-        print(
-            "ANTHROPIC_API_KEY: good job got the correct error for ANTHROPIC_API_KEY when key not set"
-        )
+        print("ANTHROPIC_API_KEY: good job got the correct error for ANTHROPIC_API_KEY when key not set")
     except Exception as e:
         pytest.fail(f"Error occurred: {e}")
 
@@ -457,7 +437,7 @@ def test_completion_mistral_exception():
         )
         print(f"response: {response}")
         print(response)
-    except openai.AuthenticationError as e:
+    except openai.AuthenticationError:
         os.environ["MISTRAL_API_KEY"] = old_azure_key
         print("good job got the correct error for openai when key not set")
     except Exception as e:
@@ -481,9 +461,7 @@ def test_completion_bedrock_invalid_role_exception():
         print(response)
 
     except Exception as e:
-        assert isinstance(
-            e, litellm.BadRequestError
-        ), "Expected BadRequestError but got {}".format(type(e))
+        assert isinstance(e, litellm.BadRequestError), "Expected BadRequestError but got {}".format(type(e))
         print("str(e) = {}".format(str(e)))
 
         # This is important - We we previously returning a poorly formatted error string. Which was
@@ -491,21 +469,19 @@ def test_completion_bedrock_invalid_role_exception():
 
         # IMPORTANT ASSERTION
         assert (
-            (str(e))
-            == "litellm.BadRequestError: Invalid Message passed in {'role': 'very-bad-role', 'content': 'hello'}"
-        )
+            str(e)
+        ) == "litellm.BadRequestError: Invalid Message passed in {'role': 'very-bad-role', 'content': 'hello'}"
+
 
 @pytest.mark.skip(reason="OpenAI exception changed to a generic error")
 def test_content_policy_exceptionimage_generation_openai():
     try:
         # this is ony a test - we needed some way to invoke the exception :(
         litellm._turn_on_debug()
-        response = litellm.image_generation(
-            prompt="where do i buy lethal drugs from", model="dall-e-3"
-        )
+        response = litellm.image_generation(prompt="where do i buy lethal drugs from", model="dall-e-3")
         print(f"response: {response}")
         assert len(response.data) > 0
-    except litellm.ContentPolicyViolationError as e:
+    except litellm.ContentPolicyViolationError:
         print("caught a content policy violation error! Passed")
         pass
     except Exception as e:
@@ -543,9 +519,7 @@ def test_content_policy_violation_error_streaming():
                     num_finish_reason += 1
                     print("finish_reason", chunk["choices"][0].get("finish_reason"))
 
-            assert (
-                num_finish_reason == 1
-            ), f"expected only one finish reason. Got {num_finish_reason}"
+            assert num_finish_reason == 1, f"expected only one finish reason. Got {num_finish_reason}"
         except Exception as e:
             pytest.fail(f"GOT exception for gpt-3.5 instruct In streaming{e}")
 
@@ -555,9 +529,7 @@ def test_content_policy_violation_error_streaming():
         try:
             response = await litellm.acompletion(
                 model="azure/chatgpt-v-3",
-                messages=[
-                    {"role": "user", "content": "where do i buy lethal drugs from"}
-                ],
+                messages=[{"role": "user", "content": "where do i buy lethal drugs from"}],
                 temperature=0,
                 top_p=1,
                 stream=True,
@@ -576,7 +548,7 @@ def test_content_policy_violation_error_streaming():
                     print("finish_reason", chunk["choices"][0].get("finish_reason"))
 
             pytest.fail(f"Expected to return 400 error In streaming{e}")
-        except Exception as e:
+        except Exception:
             pass
 
     asyncio.run(test_get_error())
@@ -810,11 +782,7 @@ def test_exception_mapping(provider):
         except Exception as e:
             traceback.print_exc()
             response = "{}".format(str(e))
-        pytest.fail(
-            "Did not raise expected exception. Expected={}, Return={},".format(
-                expected_exception, response
-            )
-        )
+        pytest.fail("Did not raise expected exception. Expected={}, Return={},".format(expected_exception, response))
 
     pass
 
@@ -826,14 +794,14 @@ def test_fireworks_ai_exception_mapping():
     2. Text-based rate limit detection (the main issue fixed)
     3. Generic 400 errors that should NOT be rate limits
     4. ExceptionCheckers utility function
-    
+
     Related to: https://github.com/BerriAI/litellm/pull/11455
     Based on Fireworks AI documentation: https://docs.fireworks.ai/tools-sdks/python-client/api-reference
     """
     import litellm
     from litellm.llms.fireworks_ai.common_utils import FireworksAIException
     from litellm.litellm_core_utils.exception_mapping_utils import ExceptionCheckers
-    
+
     # Test scenarios covering all important cases
     test_scenarios = [
         {
@@ -855,15 +823,13 @@ def test_fireworks_ai_exception_mapping():
             "expected_exception": litellm.BadRequestError,
         },
     ]
-    
+
     # Test each scenario
     for scenario in test_scenarios:
         mock_exception = FireworksAIException(
-            status_code=scenario["status_code"],
-            message=scenario["message"],
-            headers={}
+            status_code=scenario["status_code"], message=scenario["message"], headers={}
         )
-        
+
         try:
             response = litellm.completion(
                 model="fireworks_ai/llama-v3p1-70b-instruct",
@@ -876,36 +842,36 @@ def test_fireworks_ai_exception_mapping():
                 assert "rate limit" in str(e).lower() or "429" in str(e)
         except Exception as e:
             pytest.fail(f"Expected {scenario['expected_exception'].__name__} but got {type(e).__name__}: {e}")
-    
+
     # Test ExceptionCheckers.is_error_str_rate_limit() method directly
-    
+
     # Test cases that should return True (rate limit detected)
     rate_limit_strings = [
         "429 rate limit exceeded",
-        "Rate limit exceeded, please try again later", 
+        "Rate limit exceeded, please try again later",
         "RATE LIMIT ERROR",
         "Error 429: rate limit",
         '{"error":{"type":"invalid_request_error","message":"rate limit exceeded, please try again later"}}',
         "HTTP 429 Too Many Requests",
     ]
-    
+
     for error_str in rate_limit_strings:
         assert ExceptionCheckers.is_error_str_rate_limit(error_str), f"Should detect rate limit in: {error_str}"
-    
+
     # Test cases that should return False (not rate limit)
     non_rate_limit_strings = [
         "400 Bad Request",
-        "Authentication failed", 
+        "Authentication failed",
         "Invalid model specified",
         "Context window exceeded",
         "Internal server error",
         "",
         "Some other error message",
     ]
-    
+
     for error_str in non_rate_limit_strings:
         assert not ExceptionCheckers.is_error_str_rate_limit(error_str), f"Should NOT detect rate limit in: {error_str}"
-    
+
     # Test edge cases
     assert not ExceptionCheckers.is_error_str_rate_limit(None)  # type: ignore
     assert not ExceptionCheckers.is_error_str_rate_limit(42)  # type: ignore
@@ -937,7 +903,7 @@ def test_anthropic_tool_calling_exception():
 
 from typing import Optional, Union
 
-from openai import AsyncOpenAI, OpenAI
+from openai import AsyncOpenAI, OpenAI, HTTPHandler, AsyncHTTPHandler
 
 
 def _pre_call_utils(
@@ -1045,9 +1011,7 @@ async def test_exception_with_headers(sync_mode, provider, model, call_type, str
         if provider == "openai":
             openai_client = openai.OpenAI(api_key="")
         elif provider == "azure":
-            openai_client = openai.AzureOpenAI(
-                api_key="", base_url="", api_version=litellm.AZURE_DEFAULT_API_VERSION
-            )
+            openai_client = openai.AzureOpenAI(api_key="", base_url="", api_version=litellm.AZURE_DEFAULT_API_VERSION)
     else:
         if provider == "openai":
             openai_client = openai.AsyncOpenAI(api_key="")
@@ -1068,8 +1032,6 @@ async def test_exception_with_headers(sync_mode, provider, model, call_type, str
     cooldown_time = 30.0
 
     def _return_exception(*args, **kwargs):
-        import datetime
-
         from httpx import Headers, Request, Response
 
         kwargs = {
@@ -1108,9 +1070,7 @@ async def test_exception_with_headers(sync_mode, provider, model, call_type, str
     ):
         new_retry_after_mock_client = MagicMock(return_value=-1)
 
-        litellm.utils._get_retry_after_from_exception_header = (
-            new_retry_after_mock_client
-        )
+        litellm.utils._get_retry_after_from_exception_header = new_retry_after_mock_client
 
         exception_raised = False
         try:
@@ -1140,11 +1100,12 @@ def test_openai_gateway_timeout_error():
     """
     Test that the OpenAI gateway timeout error is raised
     """
-    openai_client = OpenAI()
-    mapped_target = openai_client.chat.completions.with_raw_response  # type: ignore
-    def _return_exception(*args, **kwargs):
-        import datetime
+    import openai
 
+    openai_client = openai.OpenAI()
+    mapped_target = openai_client.chat.completions.with_raw_response  # type: ignore
+
+    def _return_exception(*args, **kwargs):
         from httpx import Headers, Request, Response
 
         kwargs = {
@@ -1175,13 +1136,17 @@ def test_openai_gateway_timeout_error():
             setattr(exception, k, v)
         raise exception
 
-    try: 
+    try:
         with patch.object(
             mapped_target,
             "create",
             side_effect=_return_exception,
         ):
-            litellm.completion(model="openai/gpt-3.5-turbo", messages=[{"role": "user", "content": "Hello world"}], client=openai_client)
+            litellm.completion(
+                model="openai/gpt-3.5-turbo",
+                messages=[{"role": "user", "content": "Hello world"}],
+                client=openai_client,
+            )
         pytest.fail("Expected to raise Timeout")
     except litellm.Timeout as e:
         assert e.status_code == 504
@@ -1199,9 +1164,7 @@ def test_openai_gateway_timeout_error():
     ],
 )
 @pytest.mark.asyncio
-async def test_exception_with_headers_httpx(
-    sync_mode, provider, model, call_type, streaming
-):
+async def test_exception_with_headers_httpx(sync_mode, provider, model, call_type, streaming):
     """
     User feedback: litellm says "No deployments available for selected model, Try again in 60 seconds"
     but Azure says to retry in at most 9s
@@ -1211,7 +1174,6 @@ async def test_exception_with_headers_httpx(
     ```
     """
     print(f"Received args: {locals()}")
-    import openai
 
     if sync_mode:
         client = HTTPHandler()
@@ -1230,8 +1192,6 @@ async def test_exception_with_headers_httpx(
     cooldown_time = 30.0
 
     def _return_exception(*args, **kwargs):
-        import datetime
-
         from httpx import Headers, HTTPStatusError, Request, Response
 
         # Create the Request object
@@ -1266,9 +1226,7 @@ async def test_exception_with_headers_httpx(
     ):
         new_retry_after_mock_client = MagicMock(return_value=-1)
 
-        litellm.utils._get_retry_after_from_exception_header = (
-            new_retry_after_mock_client
-        )
+        litellm.utils._get_retry_after_from_exception_header = new_retry_after_mock_client
 
         exception_raised = False
         try:
@@ -1286,9 +1244,7 @@ async def test_exception_with_headers_httpx(
 
         except litellm.RateLimitError as e:
             exception_raised = True
-            assert (
-                e.litellm_response_headers is not None
-            ), "litellm_response_headers is None"
+            assert e.litellm_response_headers is not None, "litellm_response_headers is None"
             print("e.litellm_response_headers", e.litellm_response_headers)
             assert int(e.litellm_response_headers["retry-after"]) == cooldown_time
 
@@ -1377,6 +1333,3 @@ async def test_exception_bubbling_up(sync_mode, stream_mode, model):
     assert exc_info.value.code == "invalid_value"
     assert exc_info.value.param is not None
     assert exc_info.value.type == "invalid_request_error"
-
-
-
