@@ -45,9 +45,25 @@ import httpx
 import openai
 import tiktoken
 from httpx import Proxy
-from httpx._utils import get_environment_proxies
-from openai.lib import _parsing, _pydantic
-from openai.types.chat.completion_create_params import ResponseFormat
+# httpx exposes internal helper in some versions; guard import to avoid dependency brittleness
+try:
+    from httpx._utils import get_environment_proxies
+except Exception:
+    get_environment_proxies = None
+
+# Avoid importing private OpenAI internals which may change across versions; guard attempts
+try:
+    from openai.lib import _parsing, _pydantic
+except Exception:
+    _parsing = None
+    _pydantic = None
+
+# ResponseFormat may not exist across versions in the same module path; guard import
+try:
+    from openai.types.chat.completion_create_params import ResponseFormat
+except Exception:
+    ResponseFormat = None
+
 from pydantic import BaseModel
 from tiktoken import Encoding
 from tokenizers import Tokenizer
@@ -311,10 +327,10 @@ greenscaleLogger = None
 lunaryLogger = None
 aispendLogger = None
 supabaseClient = None
-callback_list: Optional[List[str]] = []
+callback_list: Optional[List[str]] = None
 user_logger_fn = None
-additional_details: Optional[Dict[str, str]] = {}
-local_cache: Optional[Dict[str, str]] = {}
+additional_details: Optional[Dict[str, str]] = None
+local_cache: Optional[Dict[str, str]] = None
 last_fetched_at = None
 last_fetched_at_keys = None
 ######## Model Response #########################
@@ -406,14 +422,17 @@ def _add_custom_logger_callback_to_specific_event(
             litellm.logging_callback_manager.add_litellm_async_success_callback(
                 callback_class
             )
-            if callback in litellm.success_callback:
-                litellm.success_callback.remove(
-                    callback
-                )  # remove the string from the callback list
-            if callback in litellm._async_success_callback:
-                litellm._async_success_callback.remove(
-                    callback
-                )  # remove the string from the callback list
+            # defensively remove the string from module-level callback containers if they exist
+            if getattr(litellm, "success_callback", None) and callback in litellm.success_callback:
+                try:
+                    litellm.success_callback.remove(callback)
+                except Exception:
+                    pass
+            if getattr(litellm, "_async_success_callback", None) and callback in litellm._async_success_callback:
+                try:
+                    litellm._async_success_callback.remove(callback)
+                except Exception:
+                    pass
         elif (
             logging_event == "failure"
             and _custom_logger_class_exists_in_failure_callbacks(callback_class)
@@ -425,14 +444,16 @@ def _add_custom_logger_callback_to_specific_event(
             litellm.logging_callback_manager.add_litellm_async_failure_callback(
                 callback_class
             )
-            if callback in litellm.failure_callback:
-                litellm.failure_callback.remove(
-                    callback
-                )  # remove the string from the callback list
-            if callback in litellm._async_failure_callback:
-                litellm._async_failure_callback.remove(
-                    callback
-                )  # remove the string from the callback list
+            if getattr(litellm, "failure_callback", None) and callback in litellm.failure_callback:
+                try:
+                    litellm.failure_callback.remove(callback)
+                except Exception:
+                    pass
+            if getattr(litellm, "_async_failure_callback", None) and callback in litellm._async_failure_callback:
+                try:
+                    litellm._async_failure_callback.remove(callback)
+                except Exception:
+                    pass
 
 
 def _custom_logger_class_exists_in_success_callbacks(
@@ -445,9 +466,11 @@ def _custom_logger_class_exists_in_success_callbacks(
 
     Prevents double adding a custom logger callback to the litellm callbacks
     """
+    success_callbacks = getattr(litellm, "success_callback", None) or []
+    async_success_callbacks = getattr(litellm, "_async_success_callback", None) or []
     return any(
         isinstance(cb, type(callback_class))
-        for cb in litellm.success_callback + litellm._async_success_callback
+        for cb in success_callbacks + async_success_callbacks
     )
 
 
@@ -461,9 +484,11 @@ def _custom_logger_class_exists_in_failure_callbacks(
 
     Prevents double adding a custom logger callback to the litellm callbacks
     """
+    failure_callbacks = getattr(litellm, "failure_callback", None) or []
+    async_failure_callbacks = getattr(litellm, "_async_failure_callback", None) or []
     return any(
         isinstance(cb, type(callback_class))
-        for cb in litellm.failure_callback + litellm._async_failure_callback
+        for cb in failure_callbacks + async_failure_callbacks
     )
 
 
@@ -555,50 +580,55 @@ def function_setup(  # noqa: PLR0915
                     )
                     if callback is None or any(
                         isinstance(cb, type(callback))
-                        for cb in litellm._async_success_callback
+                        for cb in (getattr(litellm, "_async_success_callback", None) or [])
                     ):  # don't double add a callback
                         continue
-                if callback not in litellm.input_callback:
+                if callback not in (getattr(litellm, "input_callback", []) or []):
+                    # ensure container exists
+                    if getattr(litellm, "input_callback", None) is None:
+                        litellm.input_callback = []
                     litellm.input_callback.append(callback)  # type: ignore
-                if callback not in litellm.success_callback:
+                if callback not in (getattr(litellm, "success_callback", []) or []):
                     litellm.logging_callback_manager.add_litellm_success_callback(callback)  # type: ignore
-                if callback not in litellm.failure_callback:
+                if callback not in (getattr(litellm, "failure_callback", []) or []):
                     litellm.logging_callback_manager.add_litellm_failure_callback(callback)  # type: ignore
-                if callback not in litellm._async_success_callback:
+                if callback not in (getattr(litellm, "_async_success_callback", []) or []):
                     litellm.logging_callback_manager.add_litellm_async_success_callback(callback)  # type: ignore
-                if callback not in litellm._async_failure_callback:
+                if callback not in (getattr(litellm, "_async_failure_callback", []) or []):
                     litellm.logging_callback_manager.add_litellm_async_failure_callback(callback)  # type: ignore
             print_verbose(
-                f"Initialized litellm callbacks, Async Success Callbacks: {litellm._async_success_callback}"
+                f"Initialized litellm callbacks, Async Success Callbacks: {getattr(litellm, '_async_success_callback', None)}"
             )
 
         if (
-            len(litellm.input_callback) > 0
-            or len(litellm.success_callback) > 0
-            or len(litellm.failure_callback) > 0
-        ) and len(
-            callback_list  # type: ignore
-        ) == 0:  # type: ignore
+            len(getattr(litellm, "input_callback", []) or []) > 0
+            or len(getattr(litellm, "success_callback", []) or []) > 0
+            or len(getattr(litellm, "failure_callback", []) or []) > 0
+        ) and (
+            not callback_list or len(callback_list) == 0
+        ):
             callback_list = list(
                 set(
-                    litellm.input_callback  # type: ignore
-                    + litellm.success_callback
-                    + litellm.failure_callback
+                    (getattr(litellm, "input_callback", []) or [])
+                    + (getattr(litellm, "success_callback", []) or [])
+                    + (getattr(litellm, "failure_callback", []) or [])
                 )
             )
             set_callbacks(callback_list=callback_list, function_id=function_id)
         ## ASYNC CALLBACKS
-        if len(litellm.input_callback) > 0:
+        if len(getattr(litellm, "input_callback", []) or []) > 0:
             removed_async_items = []
             for index, callback in enumerate(litellm.input_callback):  # type: ignore
                 if inspect.iscoroutinefunction(callback):
+                    if getattr(litellm, "_async_input_callback", None) is None:
+                        litellm._async_input_callback = []
                     litellm._async_input_callback.append(callback)
                     removed_async_items.append(index)
 
             # Pop the async items from input_callback in reverse order to avoid index issues
             for index in reversed(removed_async_items):
                 litellm.input_callback.pop(index)
-        if len(litellm.success_callback) > 0:
+        if len(getattr(litellm, "success_callback", []) or []) > 0:
             removed_async_items = []
             for index, callback in enumerate(litellm.success_callback):  # type: ignore
                 if inspect.iscoroutinefunction(callback):
@@ -623,7 +653,7 @@ def function_setup(  # noqa: PLR0915
             for index in reversed(removed_async_items):
                 litellm.success_callback.pop(index)
 
-        if len(litellm.failure_callback) > 0:
+        if len(getattr(litellm, "failure_callback", []) or []) > 0:
             removed_async_items = []
             for index, callback in enumerate(litellm.failure_callback):  # type: ignore
                 if inspect.iscoroutinefunction(callback):
@@ -709,7 +739,7 @@ def function_setup(  # noqa: PLR0915
             if len(args) > 1:
                 messages = args[1]
             elif kwargs.get("messages", None):
-                messages = kwargs["messages"]
+                messages = kwargs.get("messages")
             ### PRE-CALL RULES ###
             if (
                 isinstance(messages, list)
@@ -734,17 +764,17 @@ def function_setup(  # noqa: PLR0915
             call_type == CallTypes.image_generation.value
             or call_type == CallTypes.aimage_generation.value
         ):
-            messages = args[0] if len(args) > 0 else kwargs["prompt"]
+            messages = args[0] if len(args) > 0 else kwargs.get("prompt")
         elif (
             call_type == CallTypes.moderation.value
             or call_type == CallTypes.amoderation.value
         ):
-            messages = args[1] if len(args) > 1 else kwargs["input"]
+            messages = args[1] if len(args) > 1 else kwargs.get("input")
         elif (
             call_type == CallTypes.atext_completion.value
             or call_type == CallTypes.text_completion.value
         ):
-            messages = args[0] if len(args) > 0 else kwargs["prompt"]
+            messages = args[0] if len(args) > 0 else kwargs.get("prompt")
         elif (
             call_type == CallTypes.rerank.value or call_type == CallTypes.arerank.value
         ):
@@ -753,7 +783,7 @@ def function_setup(  # noqa: PLR0915
             call_type == CallTypes.atranscription.value
             or call_type == CallTypes.transcription.value
         ):
-            _file_obj: FileTypes = args[1] if len(args) > 1 else kwargs["file"]
+            _file_obj: FileTypes = args[1] if len(args) > 1 else kwargs.get("file")
             file_checksum = (
                 litellm.litellm_core_utils.audio_utils.utils.get_audio_file_name(
                     file_obj=_file_obj
@@ -772,7 +802,7 @@ def function_setup(  # noqa: PLR0915
             call_type == CallTypes.aresponses.value
             or call_type == CallTypes.responses.value
         ):
-            messages = args[0] if len(args) > 0 else kwargs["input"]
+            messages = args[0] if len(args) > 0 else kwargs.get("input")
         else:
             messages = "default-message-value"
         stream = False
@@ -785,7 +815,7 @@ def function_setup(  # noqa: PLR0915
             model=model,  # type: ignore
             messages=messages,
             stream=stream,
-            litellm_call_id=kwargs["litellm_call_id"],
+            litellm_call_id=kwargs.get("litellm_call_id"),
             litellm_trace_id=kwargs.get("litellm_trace_id"),
             function_id=function_id or "",
             call_type=call_type,
@@ -832,14 +862,28 @@ async def _client_async_logging_helper(
             f"Async Wrapper: Completed Call, calling async_success_handler: {logging_obj.async_success_handler}"
         )
         # check if user does not want this to be logged
-        asyncio.create_task(
-            logging_obj.async_success_handler(result, start_time, end_time)
-        )
-        logging_obj.handle_sync_success_callbacks_for_async_calls(
-            result=result,
-            start_time=start_time,
-            end_time=end_time,
-        )
+        handler = getattr(logging_obj, "async_success_handler", None)
+        if handler is not None:
+            try:
+                # If it's an async coroutine function, schedule it directly
+                if inspect.iscoroutinefunction(handler):
+                    asyncio.create_task(handler(result, start_time, end_time))
+                elif callable(handler):
+                    # If it's a regular callable, run it in the executor to avoid blocking the event loop
+                    loop = asyncio.get_event_loop()
+                    loop.run_in_executor(None, handler, result, start_time, end_time)
+            except Exception:
+                # Avoid bubbling logging handler errors back into user flows
+                verbose_logger.exception("Error scheduling async_success_handler")
+        # still call sync handlers
+        try:
+            logging_obj.handle_sync_success_callbacks_for_async_calls(
+                result=result,
+                start_time=start_time,
+                end_time=end_time,
+            )
+        except Exception:
+            verbose_logger.exception("Error while running sync success callbacks for async calls")
 
 
 def _get_wrapper_num_retries(
@@ -1756,7 +1800,8 @@ def encode(model="", text="", custom_tokenizer: Optional[dict] = None):
     return enc
 
 
-def decode(model="", tokens: List[int] = [], custom_tokenizer: Optional[dict] = None):
+def decode(model="", tokens: Optional[List[int]] = None, custom_tokenizer: Optional[dict] = None):
+    tokens = tokens or []
     tokenizer_json = custom_tokenizer or _select_tokenizer(model=model)
     dec = tokenizer_json["tokenizer"].decode(tokens)
     return dec
@@ -1830,16 +1875,17 @@ def token_counter(
     if litellm.disable_token_counter is True:
         return 0
 
-    return token_counter_new(
-        model,
-        custom_tokenizer,
-        text,
-        messages,
-        count_response_tokens,
-        tools,
-        tool_choice,
-        use_default_image_token_count,
-        default_token_count,
+    # Delegate to the canonical implementation in litellm_core_utils
+    return litellm.litellm_core_utils.token_counter(
+        model=model,
+        custom_tokenizer=custom_tokenizer,
+        text=text,
+        messages=messages,
+        count_response_tokens=count_response_tokens,
+        tools=tools,
+        tool_choice=tool_choice,
+        use_default_image_token_count=use_default_image_token_count,
+        default_token_count=default_token_count,
     )
 
 
@@ -2121,7 +2167,7 @@ def supports_audio_output(
 ) -> bool:
     """Check if a given model supports audio output in a chat completion call"""
     return _supports_factory(
-        model=model, custom_llm_provider=custom_llm_provider, key="supports_audio_input"
+        model=model, custom_llm_provider=custom_llm_provider, key="supports_audio_output"
     )
 
 
@@ -2325,9 +2371,14 @@ def register_model(model_cost: Union[str, dict]):  # noqa: PLR0915
             if key not in litellm.anthropic_models:
                 litellm.anthropic_models.append(key)
         elif value.get("litellm_provider") == "openrouter":
-            split_string = key.split("/", 1)
-            if key not in litellm.openrouter_models:
-                litellm.openrouter_models.append(split_string[1])
+            # Safely handle keys that may not contain a '/'
+            if "/" in key:
+                split_string = key.split("/", 1)
+                candidate = split_string[1]
+            else:
+                candidate = key
+            if candidate not in litellm.openrouter_models:
+                litellm.openrouter_models.append(candidate)
         elif value.get("litellm_provider") == "vertex_ai-text-models":
             if key not in litellm.vertex_text_models:
                 litellm.vertex_text_models.append(key)
@@ -2370,7 +2421,7 @@ def _should_drop_param(k, additional_drop_params) -> bool:
 
 
 def _get_non_default_params(
-    passed_params: dict, default_params: dict, additional_drop_params: Optional[bool]
+    passed_params: dict, default_params: dict, additional_drop_params: Optional[List[str]] = None
 ) -> dict:
     non_default_params = {}
     for k, v in passed_params.items():
@@ -2659,13 +2710,19 @@ def get_optional_params_embeddings(  # noqa: PLR0915
     provider_config: Optional[BaseEmbeddingConfig] = None
 
     optional_params = {}
-    if (
-        custom_llm_provider is not None
-        and custom_llm_provider in LlmProviders._member_map_.values()
-    ):
+    # Attempt to coerce the provided custom_llm_provider into the LlmProviders enum safely
+    provider_config: Optional[BaseEmbeddingConfig] = None
+    provider_enum = None
+    if custom_llm_provider:
+        try:
+            provider_enum = LlmProviders(custom_llm_provider)
+        except Exception:
+            provider_enum = None
+
+    if provider_enum is not None:
         provider_config = ProviderConfigManager.get_provider_embedding_config(
             model=model,
-            provider=LlmProviders(custom_llm_provider),
+            provider=provider_enum,
         )
 
     if provider_config is not None:
@@ -4067,8 +4124,9 @@ def calculate_max_parallel_requests(
     elif rpm is not None:
         return rpm
     elif tpm is not None:
-        calculated_rpm = int(tpm / 1000 / 6)
-        if calculated_rpm == 0:
+        # Azure formula: 6 RPM per 1000 TPM -> (tpm / 1000) * 6
+        calculated_rpm = int((tpm / 1000) * 6)
+        if calculated_rpm <= 0:
             calculated_rpm = 1
         return calculated_rpm
     elif default_max_parallel_requests is not None:
@@ -4081,7 +4139,7 @@ def _get_order_filtered_deployments(healthy_deployments: List[Dict]) -> List:
         (
             deployment["litellm_params"]["order"]
             for deployment in healthy_deployments
-            if "order" in deployment["litellm_params"]
+            if deployment.get("litellm_params") is not None and "order" in deployment["litellm_params"]
         ),
         default=None,
     )
@@ -4278,7 +4336,7 @@ def get_api_key(llm_provider: str, dynamic_api_key: Optional[str]):
         api_key = api_key or litellm.anthropic_key or get_secret("ANTHROPIC_API_KEY")
     # ai21
     elif llm_provider == "ai21":
-        api_key = api_key or litellm.ai21_key or get_secret("AI211_API_KEY")
+        api_key = api_key or litellm.ai21_key or get_secret("AI21_API_KEY")
     # aleph_alpha
     elif llm_provider == "aleph_alpha":
         api_key = (
@@ -5082,7 +5140,7 @@ def load_test_model(
         response_time = end_time - start_time
         return {
             "total_response_time": response_time,
-            "calls_made": 100,
+            "calls_made": test_calls,
             "status": "success",
             "exception": None,
         }
@@ -5091,7 +5149,7 @@ def load_test_model(
         response_time = end_time - start_time
         return {
             "total_response_time": response_time,
-            "calls_made": 100,
+            "calls_made": test_calls,
             "status": "failed",
             "exception": e,
         }
@@ -5521,7 +5579,7 @@ def prompt_token_calculator(model, messages):
         try:
             import anthropic
         except Exception:
-            Exception("Anthropic import failed please run `pip install anthropic`")
+            raise Exception("Anthropic import failed please run `pip install anthropic`")
         from anthropic import AI_PROMPT, HUMAN_PROMPT, Anthropic
 
         anthropic_obj = Anthropic()
@@ -5629,7 +5687,8 @@ def _get_retry_after_from_exception_header(
         return retry_after
 
     except Exception:
-        retry_after = -1
+        # Ensure we always return a numeric sentinel on failure
+        return -1
 
 
 def _calculate_retry_after(
@@ -5652,18 +5711,22 @@ def _calculate_retry_after(
     sleep_seconds = min(initial_retry_delay * pow(2.0, nb_retries), max_retry_delay)
 
     # Apply some jitter, plus-or-minus half a second.
-    jitter = JITTER * random.random()
-    timeout = sleep_seconds * jitter
+    # Apply jitter: +/- a fraction of sleep_seconds controlled by JITTER
+    # jitter will be in range [-JITTER/2, +JITTER/2]
+    jitter = JITTER * (random.random() - 0.5)
+    timeout = sleep_seconds * (1 + jitter)
+    if timeout < 0:
+        timeout = 0
     return timeout if timeout >= min_timeout else min_timeout
 
 
 # custom prompt helper function
 def register_prompt_template(
     model: str,
-    roles: dict = {},
+    roles: Optional[dict] = None,
     initial_prompt_value: str = "",
     final_prompt_value: str = "",
-    tokenizer_config: dict = {},
+    tokenizer_config: Optional[dict] = None,
 ):
     """
     Register a prompt template to follow your custom format for a given model
@@ -5707,6 +5770,10 @@ def register_prompt_template(
         potential_models.append(model)
     except Exception:
         pass
+
+    roles = roles or {}
+    tokenizer_config = tokenizer_config or {}
+
     if tokenizer_config:
         for m in potential_models:
             litellm.known_tokenizer_config[m] = {
@@ -5751,15 +5818,52 @@ class TextCompletionStreamWrapper:
             response["created"] = chunk.get("created", None)
             response["model"] = chunk.get("model", None)
             text_choices = TextChoices()
-            if isinstance(
-                chunk, Choices
-            ):  # chunk should always be of type StreamingChoices
-                raise Exception
-            delta = chunk["choices"][0]["delta"]
-            text_choices["text"] = delta["content"]
-            text_choices["reasoning_content"] = delta.get("reasoning_content")
-            text_choices["index"] = chunk["choices"][0]["index"]
-            text_choices["finish_reason"] = chunk["choices"][0]["finish_reason"]
+
+            # Robustly handle both streaming (delta) and non-streaming choices
+            choice0 = chunk["choices"][0]
+
+            # Try streaming delta first
+            delta = None
+            if isinstance(choice0, dict):
+                delta = choice0.get("delta")
+            else:
+                # For object-like choices, attempt attribute access
+                delta = getattr(choice0, "delta", None)
+
+            if delta:
+                # Streaming shape
+                content = delta.get("content") if isinstance(delta, dict) else getattr(delta, "content", None)
+                reasoning = delta.get("reasoning_content") if isinstance(delta, dict) else getattr(delta, "reasoning_content", None)
+            else:
+                # Non-streaming shape: try 'message' then 'text'
+                message = None
+                if isinstance(choice0, dict):
+                    message = choice0.get("message") or choice0.get("text")
+                    finish_reason = choice0.get("finish_reason")
+                    index = choice0.get("index")
+                else:
+                    message = getattr(choice0, "message", None) or getattr(choice0, "text", None)
+                    finish_reason = getattr(choice0, "finish_reason", None)
+                    index = getattr(choice0, "index", None)
+
+                if isinstance(message, dict):
+                    content = message.get("content")
+                else:
+                    content = message
+                reasoning = None
+
+            text_choices["text"] = content
+            text_choices["reasoning_content"] = reasoning
+            # best-effort index and finish_reason extraction
+            try:
+                text_choices["index"] = choice0.get("index") if isinstance(choice0, dict) else getattr(choice0, "index", None)
+            except Exception:
+                text_choices["index"] = None
+            try:
+                text_choices["finish_reason"] = choice0.get("finish_reason") if isinstance(choice0, dict) else getattr(choice0, "finish_reason", None)
+            except Exception:
+                text_choices["finish_reason"] = None
+
             response["choices"] = [text_choices]
 
             # only pass usage when stream_options["include_usage"] is True
@@ -5816,7 +5920,11 @@ def mock_completion_streaming_obj(
     for i in range(0, len(mock_response), 3):
         completion_obj = Delta(role="assistant", content=mock_response[i : i + 3])
         if n is None:
-            model_response.choices[0].delta = completion_obj
+            # Ensure we produce a StreamingChoices shape even for single-choice streaming
+            _streaming_choice = litellm.utils.StreamingChoices(
+                index=0, delta=completion_obj
+            )
+            model_response.choices = [_streaming_choice]
         else:
             _all_choices = []
             for j in range(n):
@@ -5839,7 +5947,11 @@ async def async_mock_completion_streaming_obj(
     for i in range(0, len(mock_response), 3):
         completion_obj = Delta(role="assistant", content=mock_response[i : i + 3])
         if n is None:
-            model_response.choices[0].delta = completion_obj
+            # Ensure we produce a StreamingChoices shape even for single-choice streaming
+            _streaming_choice = litellm.utils.StreamingChoices(
+                index=0, delta=completion_obj
+            )
+            model_response.choices = [_streaming_choice]
         else:
             _all_choices = []
             for j in range(n):
@@ -6146,8 +6258,9 @@ class AvailableModelsCache(InMemoryCache):
         """Check if environment variables have changed"""
         current_hash = self._get_env_hash()
         if self._env_hash is None:
+            # Initialize stored hash but don't treat the very first set as a change
             self._env_hash = current_hash
-            return True
+            return False
         return current_hash != self._env_hash
 
     def _get_cache_key(
@@ -6264,9 +6377,9 @@ def get_valid_models(
     """
 
     try:
-        check_provider_endpoint = (
-            check_provider_endpoint or litellm.check_provider_endpoint
-        )
+        # Only default to litellm.check_provider_endpoint when caller did not provide a value
+    if check_provider_endpoint is None:
+        check_provider_endpoint = litellm.check_provider_endpoint
         # get keys set in .env
 
         valid_providers: List[str] = []
@@ -6393,8 +6506,16 @@ class ModelResponseIterator:
     def __init__(self, model_response: ModelResponse, convert_to_delta: bool = False):
         if convert_to_delta is True:
             self.model_response = ModelResponse(stream=True)
-            _delta = self.model_response.choices[0].delta  # type: ignore
-            _delta.content = model_response.choices[0].message.content  # type: ignore
+            try:
+                _delta = self.model_response.choices[0].delta  # type: ignore
+                _delta.content = model_response.choices[0].message.content  # type: ignore
+            except Exception:
+                # Best-effort fallback: align the structure with the provided model_response
+                try:
+                    self.model_response.choices = copy.deepcopy(model_response.choices)
+                except Exception:
+                    # If everything fails, leave the default ModelResponse and avoid raising
+                    pass
         else:
             self.model_response = model_response
         self.is_done = False
@@ -6590,8 +6711,10 @@ def validate_and_fix_openai_messages(messages: List):
     """
     new_messages = []
     for message in messages:
+        # If role is missing, default to 'user' which is the safest assumption
+        # to avoid mis-classifying user input as assistant output.
         if not message.get("role"):
-            message["role"] = "assistant"
+            message["role"] = "user"
         if message.get("tool_calls"):
             message["tool_calls"] = jsonify_tools(tools=message["tool_calls"])
 
