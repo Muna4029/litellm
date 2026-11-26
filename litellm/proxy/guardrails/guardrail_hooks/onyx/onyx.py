@@ -21,7 +21,7 @@ from litellm.proxy._types import UserAPIKeyAuth
 from litellm.types.utils import CallTypesLiteral, LLMResponseTypes
 
 if TYPE_CHECKING:
-    from litellm.types.proxy.guardrails.guardrail_hooks.base import GuardrailConfigModel
+    from litellm.proxy.guardrails.guardrail_hooks.base import GuardrailConfigModel
 
 
 class HookType(Enum):
@@ -99,8 +99,8 @@ class OnyxGuardrail(CustomGuardrail):
     async def async_pre_call_hook(
         self,
         user_api_key_dict: UserAPIKeyAuth,
-        cache: DualCache,
         data: dict,
+        cache: DualCache,
         call_type: CallTypesLiteral,
     ) -> Union[Exception, str, dict, None]:
         """
@@ -125,8 +125,9 @@ class OnyxGuardrail(CustomGuardrail):
 
     async def async_moderation_hook(
         self,
-        data: dict,
         user_api_key_dict: UserAPIKeyAuth,
+        data: dict,
+        cache: DualCache,
         call_type: CallTypesLiteral,
     ) -> Union[Exception, str, dict, None]:
         """
@@ -189,7 +190,7 @@ class OnyxGuardrail(CustomGuardrail):
 
     @staticmethod
     def get_config_model() -> Optional[Type["GuardrailConfigModel"]]:
-        from litellm.types.proxy.guardrails.guardrail_hooks.onyx import (
+        from litellm.proxy.guardrails.guardrail_hooks.onyx import (
             OnyxGuardrailConfigModel,
         )
 
