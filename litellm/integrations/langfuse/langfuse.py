@@ -93,11 +93,7 @@ class LangFuseLogger:
             project_id = None
 
         if os.getenv("UPSTREAM_LANGFUSE_SECRET_KEY") is not None:
-            upstream_langfuse_debug = (
-                str_to_bool(self.upstream_langfuse_debug)
-                if self.upstream_langfuse_debug is not None
-                else None
-            )
+            # Read upstream env vars first into locals, then set attributes.
             self.upstream_langfuse_secret_key = os.getenv(
                 "UPSTREAM_LANGFUSE_SECRET_KEY"
             )
@@ -106,7 +102,12 @@ class LangFuseLogger:
             )
             self.upstream_langfuse_host = os.getenv("UPSTREAM_LANGFUSE_HOST")
             self.upstream_langfuse_release = os.getenv("UPSTREAM_LANGFUSE_RELEASE")
-            self.upstream_langfuse_debug = os.getenv("UPSTREAM_LANGFUSE_DEBUG")
+            upstream_debug_env = os.getenv("UPSTREAM_LANGFUSE_DEBUG")
+            upstream_langfuse_debug = (
+                str_to_bool(upstream_debug_env) if upstream_debug_env is not None else None
+            )
+            # keep the raw env value on the instance as well
+            self.upstream_langfuse_debug = upstream_debug_env
             self.upstream_langfuse = Langfuse(
                 public_key=self.upstream_langfuse_public_key,
                 secret_key=self.upstream_langfuse_secret_key,
@@ -310,37 +311,37 @@ class LangFuseLogger:
             output = status_message
         elif response_obj is not None and (
             kwargs.get("call_type", None) == "embedding"
-            or isinstance(response_obj, litellm.EmbeddingResponse)
+            or isinstance(response_obj, EmbeddingResponse)
         ):
             input = prompt
             output = None
         elif response_obj is not None and isinstance(
-            response_obj, litellm.ModelResponse
+            response_obj, ModelResponse
         ):
             input = prompt
             output = self._get_chat_content_for_langfuse(response_obj)
         elif response_obj is not None and isinstance(
-            response_obj, litellm.HttpxBinaryResponseContent
+            response_obj, HttpxBinaryResponseContent
         ):
             input = prompt
             output = "speech-output"
         elif response_obj is not None and isinstance(
-            response_obj, litellm.TextCompletionResponse
+            response_obj, TextCompletionResponse
         ):
             input = prompt
             output = self._get_text_completion_content_for_langfuse(response_obj)
         elif response_obj is not None and isinstance(
-            response_obj, litellm.ImageResponse
+            response_obj, ImageResponse
         ):
             input = prompt
             output = response_obj.get("data", None)
         elif response_obj is not None and isinstance(
-            response_obj, litellm.TranscriptionResponse
+            response_obj, TranscriptionResponse
         ):
             input = prompt
             output = response_obj.get("text", None)
         elif response_obj is not None and isinstance(
-            response_obj, litellm.RerankResponse
+            response_obj, RerankResponse
         ):
             input = prompt
             output = response_obj.results
