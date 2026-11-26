@@ -252,15 +252,26 @@ Then provide a clear, concise answer based on your reasoning."""
                     existing_content = msg.get("content", "")
                     reasoning_prompt = self._get_mistral_reasoning_system_prompt()
                     
-                    # Handle both string and list content
+                    # Handle both string and list content. AllMessageValues expects a str for content
                     if isinstance(existing_content, str):
                         # String content - prepend reasoning prompt
                         new_content = f"{reasoning_prompt}\n\n{existing_content}"
                     elif isinstance(existing_content, list):
-                        # List content - prepend reasoning prompt as text block
-                        new_content = [
-                            {"type": "text", "text": reasoning_prompt + "\n\n"}
-                        ] + existing_content
+                        # List content - convert list blocks to a single string and prepend reasoning prompt
+                        parts: List[str] = []
+                        for part in existing_content:
+                            if isinstance(part, dict):
+                                # Prefer 'text' key if present
+                                text_part = part.get("text") if isinstance(part.get("text"), str) else None
+                                if text_part is not None:
+                                    parts.append(text_part)
+                                else:
+                                    # Fallback to string representation
+                                    parts.append(str(part))
+                            else:
+                                parts.append(str(part))
+                        combined_existing = "\n\n".join(p for p in parts if p)
+                        new_content = f"{reasoning_prompt}\n\n{combined_existing}"
                     else:
                         # Fallback for any other type - convert to string
                         new_content = f"{reasoning_prompt}\n\n{str(existing_content)}"
