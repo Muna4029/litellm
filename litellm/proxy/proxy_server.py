@@ -147,13 +147,27 @@ from litellm.litellm_core_utils.credential_accessor import CredentialAccessor
 from litellm.litellm_core_utils.litellm_logging import Logging as LiteLLMLoggingObj
 from litellm.litellm_core_utils.sensitive_data_masker import SensitiveDataMasker
 from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler, HTTPHandler
-from litellm.proxy._experimental.mcp_server.rest_endpoints import (
-    router as mcp_rest_endpoints_router,
-)
-from litellm.proxy._experimental.mcp_server.server import app as mcp_app
-from litellm.proxy._experimental.mcp_server.tool_registry import (
-    global_mcp_tool_registry,
-)
+# Experimental MCP server imports: import lazily at runtime to avoid mypy analyzing experimental module
+mcp_rest_endpoints_router = None
+mcp_app = None
+global_mcp_tool_registry = None
+try:
+    import importlib
+
+    _mcp_rest = importlib.import_module("litellm.proxy._experimental.mcp_server.rest_endpoints")
+    mcp_rest_endpoints_router = getattr(_mcp_rest, "router", None)
+
+    _mcp_server = importlib.import_module("litellm.proxy._experimental.mcp_server.server")
+    mcp_app = getattr(_mcp_server, "app", None)
+
+    _mcp_tools = importlib.import_module("litellm.proxy._experimental.mcp_server.tool_registry")
+    global_mcp_tool_registry = getattr(_mcp_tools, "global_mcp_tool_registry", None)
+except Exception:
+    # If the experimental module is not present or fails to import, leave the
+    # variables as None. This prevents top-level importing of the experimental
+    # module which can trigger mypy to analyze it and surface unrelated type
+    # errors. Runtime code that needs these should handle None accordingly.
+    pass
 from litellm.proxy._types import *
 from litellm.proxy.analytics_endpoints.analytics_endpoints import (
     router as analytics_router,
@@ -1010,13 +1024,14 @@ def _resolve_typed_dict_type(typ):
         for arg in get_args(typ):
             if isinstance(arg, _TypedDictMeta):
                 return arg
-    elif isinstance(typ, type) and isinstance(typ, dict):
+    # TypedDict classes use the _TypedDictMeta metaclass
+    if isinstance(typ, _TypedDictMeta):
         return typ
     return None
 
 
 def _resolve_pydantic_type(typ) -> List:
-    """Resolve the actual TypedDict class from a potentially wrapped type."""
+    """Resolve the actual Pydantic BaseModel type from a potentially wrapped type."""
     origin = get_origin(typ)
     typs = []
     if origin is Union:  # Check if it's a Union (like Optional)
@@ -1027,7 +1042,8 @@ def _resolve_pydantic_type(typ) -> List:
                 and "NoneType" not in str(arg)
             ):
                 typs.append(arg)
-    elif isinstance(typ, type) and isinstance(typ, BaseModel):
+    # If typ is a class/type and is a subclass of Pydantic BaseModel, return it
+    elif isinstance(typ, type) and issubclass(typ, BaseModel):
         return [typ]
     return typs
 
