@@ -227,7 +227,7 @@ class MCPServerManager:
                 spec_path=server_config.get("spec_path", None),
                 url=server_url,
                 command=server_config.get("command", None) or "",
-                args=server_config.get("args", None) or [],
+                args=[str(x) for x in (server_config.get("args", None) or [])],
                 env=server_config.get("env", None) or {},
                 # oauth specific fields
                 client_id=server_config.get("client_id", None),
@@ -482,7 +482,7 @@ class MCPServerManager:
                     registration_url=getattr(mcp_server, "registration_url", None),
                     # Stdio-specific fields
                     command=getattr(mcp_server, "command", None),
-                    args=getattr(mcp_server, "args", None) or [],
+                    args=[str(x) for x in (getattr(mcp_server, "args", None) or [])],
                     env=env_dict,
                     access_groups=getattr(mcp_server, "mcp_access_groups", None),
                     allowed_tools=getattr(mcp_server, "allowed_tools", None),
@@ -785,10 +785,11 @@ class MCPServerManager:
                 )
 
             preferred_scopes = scopes or resource_scopes
-            if metadata is None and preferred_scopes:
-                metadata = MCPOAuthMetadata(scopes=preferred_scopes)
-            elif metadata is not None and preferred_scopes:
-                metadata.scopes = preferred_scopes
+            preferred_scopes_list: List[str] = preferred_scopes or []
+            if metadata is None and preferred_scopes_list:
+                metadata = MCPOAuthMetadata(scopes=preferred_scopes_list)
+            elif metadata is not None and preferred_scopes_list:
+                metadata.scopes = preferred_scopes_list
 
             return metadata
         except Exception as exc:  # pragma: no cover - network/transient issues
