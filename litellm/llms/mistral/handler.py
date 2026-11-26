@@ -37,10 +37,18 @@ def completion(
     # Create Mistral config for transformations
     provider_config = MistralConfig()
     
-    # Get the API base and key from the config
-    api_base, api_key = provider_config._get_openai_compatible_provider_info(
+    # Get the API base and key from the config. The provider helper may return
+    # either a tuple (api_base, api_key) or a single api_base value depending
+    # on its implementation/annotations, so handle both cases safely.
+    result = provider_config._get_openai_compatible_provider_info(
         api_base=api_base, api_key=api_key
     )
+    if isinstance(result, (tuple, list)) and len(result) >= 2:
+        api_base, api_key = result[0], result[1]
+    else:
+        # If only api_base was returned, keep/override api_base and leave api_key
+        # as provided (or None). Use the returned value as api_base.
+        api_base = result
     
     # Use the base handler for the actual HTTP calls
     return base_llm_http_handler.completion(
@@ -79,7 +87,7 @@ async def acompletion(
     stream: Optional[bool] = False,
     fake_stream: bool = False,
     api_key: Optional[str] = None,
-    headers: Optional[dict] = {},
+    headers: Optional[dict] = None,
     client=None,
     provider_config: Optional[MistralConfig] = None,
 ):
@@ -89,11 +97,14 @@ async def acompletion(
     if provider_config is None:
         provider_config = MistralConfig()
     
+    # Ensure headers is a dict (avoid mutable default and satisfy Optional type)
+    headers = headers or {}
+
     return await base_llm_http_handler.async_completion(
         custom_llm_provider=custom_llm_provider,
         provider_config=provider_config,
         api_base=api_base,
-        headers=headers or {},
+        headers=headers,
         data={},  # Will be set by transform_request
         timeout=timeout,
         model=model,
