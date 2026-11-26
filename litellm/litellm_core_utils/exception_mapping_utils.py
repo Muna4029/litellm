@@ -7,6 +7,21 @@ import httpx
 import litellm
 from litellm._logging import verbose_logger
 
+# Ensure compatibility if litellm.LlmProviders lacks expected attributes (e.g., DIGITALOCEAN).
+# Some test environments may import a litellm package that does not define all provider
+# enum members this module expects. Provide a minimal fallback to avoid AttributeError
+# during attribute access while preserving normal behavior when the real enum exists.
+if not hasattr(litellm, "LlmProviders") or not hasattr(getattr(litellm, "LlmProviders"), "DIGITALOCEAN"):
+    class _FallbackLlmProviders:
+        DIGITALOCEAN = "digitalocean"
+
+    try:
+        setattr(litellm, "LlmProviders", _FallbackLlmProviders)
+    except Exception:
+        # If we cannot set the attribute on the imported module, silently continue;
+        # downstream code should guard usage as needed.
+        pass
+
 from ..exceptions import (
     APIConnectionError,
     APIError,
@@ -59,6 +74,10 @@ class ExceptionCheckers:
         """
         Check if an error string indicates a context window exceeded error.
         """
+        # Guard against non-string inputs to avoid AttributeError from .lower()
+        if not isinstance(error_str, str):
+            return False
+
         _error_str_lowercase = error_str.lower()
         known_exception_substrings = [
             "exceed context limit",

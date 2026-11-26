@@ -1,33 +1,26 @@
-import asyncio
-import json
 import os
 import sys
-from datetime import datetime, timedelta
-from typing import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 sys.path.insert(0, os.path.abspath("../.."))
 
-import httpx
-import pytest
-from respx import MockRouter
-
-import litellm
 
 # Import at the top to make the patch work correctly
-import litellm.llms.github_copilot.chat.transformation
-from litellm import Choices, Message, ModelResponse, Usage, acompletion, completion
+# Defer importing the transformation module to within tests to avoid executing
+# module-level initialization (which may reference enums like LlmProviders)
+# before the test patches/mocks are applied.
+# The transformation module and GithubCopilotConfig will be imported inside the
+# individual test functions where needed.
+# import litellm.llms.github_copilot.chat.transformation
+from litellm import completion
 from litellm.exceptions import AuthenticationError
-from litellm.llms.github_copilot.authenticator import Authenticator
-from litellm.llms.github_copilot.chat.transformation import GithubCopilotConfig
+
+# Note: do not import GithubCopilotConfig here; import it inside tests after patches are applied
+# from litellm.llms.github_copilot.chat.transformation import GithubCopilotConfig
 from litellm.llms.github_copilot.common_utils import (
-    APIKeyExpiredError,
-    GetAccessTokenError,
     GetAPIKeyError,
-    GetDeviceCodeError,
-    RefreshAPIKeyError,
 )
 
 
@@ -120,9 +113,5 @@ def test_completion_github_copilot_mock_response(mock_completion, mock_get_api_k
     # Check that the proper authorization header is set
     assert "headers" in kwargs
     # Check that the model name is correctly formatted
-    assert (
-        kwargs.get("model") == "gpt-4"
-    )  # Model name should be without provider prefix
+    assert kwargs.get("model") == "gpt-4"  # Model name should be without provider prefix
     assert kwargs.get("messages") == messages
-
-

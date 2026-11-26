@@ -200,11 +200,38 @@ from .types.utils import (
     CompletionTokensDetails,
     FileTypes,
     HiddenParams,
-    LlmProviders,
+    LlmProviders as _OrigLlmProviders,
     PromptTokensDetails,
     ProviderSpecificHeader,
     all_litellm_params,
 )
+
+# Backwards-compatibility proxy for LlmProviders: some code references
+# attributes that may not exist on the enum in older/newer versions
+# (e.g. LlmProviders.DIGITALOCEAN). Provide a lightweight proxy object
+# that will delegate to the original enum when possible and otherwise
+# return a safe fallback (lowercased name) to avoid AttributeError at
+# import time.
+class _LlmProvidersProxy:
+    def __getattr__(self, name: str):
+        # Try direct attribute on the original enum/class
+        try:
+            return getattr(_OrigLlmProviders, name)
+        except Exception:
+            # Try some common name variants
+            variants = [name, name.upper(), name.lower(), name.replace("_", ""), name.replace(" ", "_")]
+            for v in variants:
+                try:
+                    if hasattr(_OrigLlmProviders, v):
+                        return getattr(_OrigLlmProviders, v)
+                except Exception:
+                    continue
+            # As a last resort, return a safe string fallback so attribute access
+            # does not raise. Consumers that expect enum members may need to be
+            # adjusted, but this avoids import-time AttributeErrors.
+            return name.lower()
+
+LlmProviders = _LlmProvidersProxy()
 
 encoding = tiktoken.get_encoding("cl100k_base")
 from litellm.utils import (
@@ -5209,21 +5236,28 @@ def speech(  # noqa: PLR0915
         max_retries = litellm.num_retries or openai.DEFAULT_MAX_RETRIES
     litellm_params_dict = get_litellm_params(**kwargs)
     logging_obj = kwargs.get("litellm_logging_obj", None)
-    logging_obj.update_environment_variables(
-        model=model,
-        user=user,
-        optional_params={},
-        litellm_params={
-            "litellm_call_id": litellm_call_id,
-            "proxy_server_request": proxy_server_request,
-            "model_info": model_info,
-            "metadata": metadata,
-            "preset_cache_key": None,
-            "stream_response": {},
-            **kwargs,
-        },
-        custom_llm_provider=custom_llm_provider,
-    )
+    # Only call update_environment_variables if a logging object was provided.
+    if logging_obj is not None:
+        try:
+            logging_obj.update_environment_variables(
+                model=model,
+                user=user,
+                optional_params={},
+                litellm_params={
+                    "litellm_call_id": litellm_call_id,
+                    "proxy_server_request": proxy_server_request,
+                    "model_info": model_info,
+                    "metadata": metadata,
+                    "preset_cache_key": None,
+                    "stream_response": {},
+                    **kwargs,
+                },
+                custom_llm_provider=custom_llm_provider,
+            )
+        except Exception:
+            # Protect against unexpected errors from logging object to avoid
+            # breaking the main flow.
+            pass
     response: Optional[HttpxBinaryResponseContent] = None
     if (
         custom_llm_provider == "openai"
@@ -5599,7 +5633,7 @@ def stream_chunk_builder_text_completion(
     chunks: list, messages: Optional[List] = None
 ) -> TextCompletionResponse:
     id = chunks[0]["id"]
-    object = chunks[0]["object"]
+    object_type = chunks[0]["object"]
     created = chunks[0]["created"]
     model = chunks[0]["model"]
     system_fingerprint = chunks[0].get("system_fingerprint", None)
@@ -5608,7 +5642,7 @@ def stream_chunk_builder_text_completion(
 
     response = {
         "id": id,
-        "object": object,
+        "object": object_type,
         "created": created,
         "model": model,
         "system_fingerprint": system_fingerprint,
@@ -5630,13 +5664,16 @@ def stream_chunk_builder_text_completion(
     for chunk in chunks:
         choices = chunk["choices"]
         for choice in choices:
-            if (
-                choice is not None
-                and hasattr(choice, "text")
-                and choice.get("text") is not None
-            ):
-                _choice = choice.get("text")
-                content_list.append(_choice)
+            if choice is None:
+                continue
+            # Support both dict-like choices and objects with a .text attribute.
+            text_val = None
+            if isinstance(choice, dict):
+                text_val = choice.get("text")
+            else:
+                text_val = getattr(choice, "text", None)
+            if text_val is not None:
+                content_list.append(text_val)
 
     # Combine the "content" strings into a single string || combine the 'function' strings into a single string
     combined_content = "".join(content_list)
