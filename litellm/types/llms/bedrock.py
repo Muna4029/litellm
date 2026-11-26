@@ -1,16 +1,26 @@
 import json
 from typing import Any, List, Literal, Optional, TypedDict, Union
 
-from typing_extensions import (
-    TYPE_CHECKING,
-    Protocol,
-    Required,
-    Self,
-    TypeGuard,
-    get_origin,
-    override,
-    runtime_checkable,
-)
+# Prefer stdlib "typing" names when available to avoid mismatches between
+# typing and typing_extensions that can trigger mypy errors (e.g. with Required
+# inside TypedDicts). Fall back to typing_extensions only if necessary.
+try:
+    from typing import (
+        TYPE_CHECKING,
+        Protocol,
+        Required,
+        Self,
+        TypeGuard,
+        get_origin,
+        override,
+        runtime_checkable,
+    )
+except ImportError:
+    from typing_extensions import (
+        TYPE_CHECKING,
+        Required,
+        override,
+    )
 
 from .openai import ChatCompletionToolCallChunk
 
@@ -36,9 +46,7 @@ class ImageBlock(TypedDict):
     source: SourceBlock
 
 
-BedrockVideoTypes = Literal[
-    "mp4", "mov", "mkv", "webm", "flv", "mpeg", "mpg", "wmv", "3gp"
-]
+BedrockVideoTypes = Literal["mp4", "mov", "mkv", "webm", "flv", "mpeg", "mpg", "wmv", "3gp"]
 
 
 class VideoBlock(TypedDict):
@@ -46,9 +54,7 @@ class VideoBlock(TypedDict):
     source: SourceBlock
 
 
-BedrockDocumentTypes = Literal[
-    "pdf", "csv", "doc", "docx", "xls", "xlsx", "html", "txt", "md"
-]
+BedrockDocumentTypes = Literal["pdf", "csv", "doc", "docx", "xls", "xlsx", "html", "txt", "md"]
 
 
 class DocumentBlock(TypedDict):
@@ -130,9 +136,7 @@ class ConverseResponseBlock(TypedDict):
     additionalModelResponseFields: dict
     metrics: ConverseMetricsBlock
     output: ConverseResponseOutputBlock
-    stopReason: (
-        str  # end_turn | tool_use | max_tokens | stop_sequence | content_filtered
-    )
+    stopReason: str  # end_turn | tool_use | max_tokens | stop_sequence | content_filtered
     usage: ConverseTokenUsageBlock
 
 
@@ -214,9 +218,7 @@ class PerformanceConfigBlock(TypedDict):
     latency: Literal["optimized", "throughput"]
 
 
-class CommonRequestObject(
-    TypedDict, total=False
-):  # common request object across sync + async flows
+class CommonRequestObject(TypedDict, total=False):  # common request object across sync + async flows
     additionalModelRequestFields: dict
     additionalModelResponseFieldPaths: List[str]
     inferenceConfig: InferenceConfig
@@ -297,9 +299,7 @@ class ServerSentEvent:
         return f"ServerSentEvent(event={self.event}, data={self.data}, id={self.id}, retry={self.retry})"
 
 
-COHERE_EMBEDDING_INPUT_TYPES = Literal[
-    "search_document", "search_query", "classification", "clustering", "image"
-]
+COHERE_EMBEDDING_INPUT_TYPES = Literal["search_document", "search_query", "classification", "clustering", "image"]
 
 
 class CohereEmbeddingRequest(TypedDict, total=False):
@@ -372,9 +372,7 @@ class AmazonStability3TextToImageRequest(TypedDict, total=False):
     """
 
     prompt: str
-    aspect_ratio: Literal[
-        "16:9", "1:1", "21:9", "2:3", "3:2", "4:5", "5:4", "9:16", "9:21"
-    ]
+    aspect_ratio: Literal["16:9", "1:1", "21:9", "2:3", "3:2", "4:5", "5:4", "9:16", "9:21"]
     mode: Literal["image-to-image", "text-to-image"]
     output_format: Literal["JPEG", "PNG"]
     seed: int
@@ -428,9 +426,7 @@ class AmazonNovaCanvasTextToImageParams(TypedDict, total=False):
     conditionImage: str
 
 
-class AmazonNovaCanvasTextToImageRequest(
-    AmazonNovaCanvasRequestBase, TypedDict, total=False
-):
+class AmazonNovaCanvasTextToImageRequest(AmazonNovaCanvasRequestBase, TypedDict, total=False):
     """
     Request for Amazon Nova Canvas Text to Image API
 
@@ -453,9 +449,7 @@ class AmazonNovaCanvasColorGuidedGenerationParams(TypedDict, total=False):
     negativeText: str
 
 
-class AmazonNovaCanvasColorGuidedRequest(
-    AmazonNovaCanvasRequestBase, TypedDict, total=False
-):
+class AmazonNovaCanvasColorGuidedRequest(AmazonNovaCanvasRequestBase, TypedDict, total=False):
     """
     Request for Amazon Nova Canvas Color Guided Generation API
 
@@ -481,20 +475,20 @@ class AmazonNovaCanvasInpaintingParams(TypedDict, total=False):
     """
     Params for Amazon Nova Canvas Inpainting API
     """
+
     text: str
     maskImage: str
     inputImage: str
     negativeText: str
 
 
-class AmazonNovaCanvasInpaintingRequest(
-    AmazonNovaCanvasRequestBase, TypedDict, total=False
-):
+class AmazonNovaCanvasInpaintingRequest(AmazonNovaCanvasRequestBase, TypedDict, total=False):
     """
     Request for Amazon Nova Canvas Inpainting API
 
     Ref: https://docs.aws.amazon.com/nova/latest/userguide/image-gen-req-resp-structure.html
     """
+
     taskType: Literal["INPAINTING"]
     inpaintingParams: AmazonNovaCanvasInpaintingParams
     imageGenerationConfig: AmazonNovaCanvasImageGenerationConfig
@@ -504,6 +498,7 @@ if TYPE_CHECKING:
     from botocore.awsrequest import AWSPreparedRequest
 else:
     AWSPreparedRequest = Any
+
 
 class BedrockPreparedRequest(TypedDict):
     """
@@ -525,8 +520,11 @@ class BedrockRerankQuery(TypedDict):
     type: Literal["TEXT"]
 
 
-class BedrockRerankModelConfiguration(TypedDict, total=False):
-    modelArn: Required[str]
+class _BedrockRerankModelConfigurationRequired(TypedDict):
+    modelArn: str
+
+
+class BedrockRerankModelConfiguration(_BedrockRerankModelConfigurationRequired, total=False):
     modelConfiguration: dict
 
 
