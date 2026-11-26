@@ -2093,7 +2093,7 @@ class Router:
     async def arerank(self, model: str, **kwargs):
         try:
             kwargs["model"] = model
-            kwargs["input"] = input
+            # 'input' should be supplied by the caller in kwargs if needed; do not reference undefined built-in
             kwargs["original_function"] = self._arerank
             self._update_kwargs_before_fallbacks(model=model, kwargs=kwargs)
 
@@ -3085,8 +3085,12 @@ class Router:
                 client: Optional[Any] = None,
                 **kwargs,
             ):
+                # Forward custom_llm_provider and client into kwargs so they are not lost
                 return self._generic_api_call_with_fallbacks(
-                    original_function=original_function, **kwargs
+                    original_function=original_function,
+                    custom_llm_provider=custom_llm_provider,
+                    client=client,
+                    **kwargs,
                 )
 
             return sync_wrapper
@@ -3164,16 +3168,21 @@ class Router:
         **kwargs,
     ):
         """Internal helper function to pass through the assistants endpoint"""
+        local_kwargs = dict(kwargs)
         if custom_llm_provider is None:
             if self.assistants_config is not None:
                 custom_llm_provider = self.assistants_config["custom_llm_provider"]
-                kwargs.update(self.assistants_config["litellm_params"])
+                # merge assistants litellm_params into a local copy to avoid duplicate keyword errors
+                local_kwargs.update(self.assistants_config.get("litellm_params", {}))
             else:
                 raise Exception(
                     "'custom_llm_provider' must be set. Either via:\n `Router(assistants_config={'custom_llm_provider': ..})` \nor\n `router.arun_thread(custom_llm_provider=..)`"
                 )
+        # Ensure we don't pass duplicate keyword arguments
+        local_kwargs.pop("custom_llm_provider", None)
+        local_kwargs.pop("client", None)
         return await original_function(  # type: ignore
-            custom_llm_provider=custom_llm_provider, client=client, **kwargs
+            custom_llm_provider=custom_llm_provider, client=client, **local_kwargs
         )
 
     #### [END] ASSISTANTS API ####
@@ -3596,7 +3605,8 @@ class Router:
         """
         model_group = kwargs.get("model")
         response = original_function(*args, **kwargs)
-        if inspect.iscoroutinefunction(response) or inspect.isawaitable(response):
+        # Inspect the returned value to decide whether to await it
+        if inspect.isawaitable(response) or asyncio.iscoroutine(response):
             response = await response
         ## PROCESS RESPONSE HEADERS
         response = await self.set_response_headers(
@@ -3681,7 +3691,7 @@ class Router:
         if isinstance(error, litellm.NotFoundError):
             raise error
         # Error we should only retry if there are other deployments
-        if isinstance(error, openai.RateLimitError):
+        if isinstance(error, (openai.RateLimitError, litellm.RateLimitError)):
             if (
                 _num_healthy_deployments <= 0  # if no healthy deployments
                 and regular_fallbacks is not None  # and fallbacks available
@@ -4035,6 +4045,9 @@ class Router:
                 self.previous_models.pop(0)
 
             self.previous_models.append(previous_model)
+            # ensure metadata exists before setting previous_models
+            if "metadata" not in kwargs or not isinstance(kwargs.get("metadata"), dict):
+                kwargs["metadata"] = {}
             kwargs["metadata"]["previous_models"] = self.previous_models
             return kwargs
         except Exception as e:
@@ -4121,7 +4134,7 @@ class Router:
                 model=model,
             )
             if isinstance(_all_deployments, dict):
-                return []
+                return [], _all_deployments
         except Exception:
             pass
 
@@ -4130,7 +4143,17 @@ class Router:
         )
         healthy_deployments: list = []
         for deployment in _all_deployments:
-            if deployment["model_info"]["id"] in unhealthy_deployments:
+            # safe access for model_info id
+            try:
+                dep_id = (
+                    deployment["model_info"]["id"]
+                    if isinstance(deployment, dict)
+                    else (getattr(deployment.model_info, "id", None))
+                )
+            except Exception:
+                dep_id = None
+
+            if dep_id in unhealthy_deployments:
                 continue
             else:
                 healthy_deployments.append(deployment)
@@ -4305,17 +4328,19 @@ class Router:
         """
         concat_str = model_group
         for k, v in litellm_params.items():
+            # handle keys (usually strings)
             if isinstance(k, str):
                 concat_str += k
-            elif isinstance(k, dict):
-                concat_str += json.dumps(k)
+            elif isinstance(k, (dict, list)):
+                concat_str += json.dumps(k, sort_keys=True)
             else:
                 concat_str += str(k)
 
+            # handle values
             if isinstance(v, str):
                 concat_str += v
-            elif isinstance(v, dict):
-                concat_str += json.dumps(v)
+            elif isinstance(v, (dict, list)):
+                concat_str += json.dumps(v, sort_keys=True)
             else:
                 concat_str += str(v)
 
@@ -4346,12 +4371,19 @@ class Router:
             model_info=_model_info,
         )
 
+        # Use getattr for litellm_params fields (LiteLLM_Params may be an object)
         for field in CustomPricingLiteLLMParams.model_fields.keys():
-            if deployment.litellm_params.get(field) is not None:
-                _model_info[field] = deployment.litellm_params[field]
+            val = getattr(deployment.litellm_params, field, None)
+            if val is not None:
+                _model_info[field] = val
 
         ## REGISTER MODEL INFO IN LITELLM MODEL COST MAP
-        model_id = deployment.model_info.id
+        model_id = None
+        if hasattr(deployment, "model_info"):
+            if isinstance(deployment.model_info, dict):
+                model_id = deployment.model_info.get("id")
+            else:
+                model_id = getattr(deployment.model_info, "id", None)
         if model_id is not None:
             litellm.register_model(
                 model_cost={
@@ -4360,11 +4392,10 @@ class Router:
             )
 
         ## OLD MODEL REGISTRATION ## Kept to prevent breaking changes
-        _model_name = deployment.litellm_params.model
-        if deployment.litellm_params.custom_llm_provider is not None:
-            _model_name = (
-                deployment.litellm_params.custom_llm_provider + "/" + _model_name
-            )
+        _model_name = getattr(deployment.litellm_params, "model", _model_name)
+        custom_provider = getattr(deployment.litellm_params, "custom_llm_provider", None)
+        if custom_provider is not None:
+            _model_name = (custom_provider + "/" + _model_name)
 
         litellm.register_model(
             model_cost={
@@ -4374,8 +4405,17 @@ class Router:
 
         ## Check if LLM Deployment is allowed for this deployment
         if self.deployment_is_active_for_environment(deployment=deployment) is not True:
+            # safe access for supported_environments
+            if hasattr(deployment, "model_info"):
+                if isinstance(deployment.model_info, dict):
+                    supported_env = deployment.model_info.get("supported_environments")
+                else:
+                    supported_env = getattr(deployment.model_info, "supported_environments", None)
+            else:
+                supported_env = None
+
             verbose_router_logger.warning(
-                f"Ignoring deployment {deployment.model_name} as it is not active for environment {deployment.model_info['supported_environments']}"
+                f"Ignoring deployment {deployment.model_name} as it is not active for environment {supported_env}"
             )
             return None
 
@@ -5406,10 +5446,13 @@ class Router:
                 _router_model_name: str = model_value
             elif isinstance(model_value, dict):
                 _model_value = RouterModelGroupAliasItem(**model_value)  # type: ignore
-                if _model_value["hidden"] is True:
+                # Access attributes on the constructed object instead of dict-style subscripting
+                if getattr(_model_value, "hidden", False) is True:
                     continue
                 else:
-                    _router_model_name = _model_value["model"]
+                    _router_model_name = getattr(_model_value, "model", None)
+                    if _router_model_name is None:
+                        continue
             else:
                 continue
 
@@ -5535,7 +5578,8 @@ class Router:
                 var == "routing_strategy_args"
                 and self.routing_strategy == "latency-based-routing"
             ):
-                _settings_to_return[var] = self.lowestlatency_logger.routing_args.json()
+                # Use the available logger attribute for latency-based routing
+                _settings_to_return[var] = self.leastbusy_logger.routing_args.json()
         return _settings_to_return
 
     def update_settings(self, **kwargs):
@@ -5881,11 +5925,21 @@ class Router:
         elif model in self.get_model_ids():
             deployment = self.get_deployment(model_id=model)
             if deployment is not None:
-                deployment_model = deployment.litellm_params.model
-                return deployment_model, deployment.model_dump(exclude_none=True)
+                # deployment may be an object or a dict
+                if hasattr(deployment, "litellm_params"):
+                    deployment_model = getattr(deployment.litellm_params, "model", None)
+                elif isinstance(deployment, dict):
+                    deployment_model = deployment.get("litellm_params", {}).get("model")
+                else:
+                    deployment_model = None
+
+                if hasattr(deployment, "model_dump"):
+                    return deployment_model, deployment.model_dump(exclude_none=True)
+                else:
+                    return deployment_model, deployment
             raise ValueError(
                 f"LiteLLM Router: Trying to call specific deployment, but Model ID :{model} does not exist in \
-                    Model ID List: {self.get_model_ids}"
+                    Model ID List: {self.get_model_ids()}"
             )
 
         _model_from_alias = self._get_model_from_alias(model=model)
@@ -6278,7 +6332,17 @@ class Router:
         Tracks successful requests rpm usage.
         """
         try:
-            model_id = deployment.get("model_info", {}).get("id", None)
+            model_id = None
+            # handle both dict-style and object-style deployment
+            if isinstance(deployment, dict):
+                model_id = deployment.get("model_info", {}).get("id", None)
+            else:
+                if hasattr(deployment, "model_info"):
+                    if isinstance(deployment.model_info, dict):
+                        model_id = deployment.model_info.get("id", None)
+                    else:
+                        model_id = getattr(deployment.model_info, "id", None)
+
             if response is None:
                 # update self.deployment_stats
                 if model_id is not None:
