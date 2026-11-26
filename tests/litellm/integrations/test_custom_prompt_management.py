@@ -1,17 +1,12 @@
-import datetime
 import json
 import os
 import sys
-import unittest
 from typing import List, Optional, Tuple
-from unittest.mock import ANY, MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
-import httpx
 import pytest
 
-sys.path.insert(
-    0, os.path.abspath("../..")
-)  # Adds the parent directory to the system-path
+sys.path.insert(0, os.path.abspath("../.."))  # Adds the parent directory to the system-path
 import litellm
 from litellm.integrations.custom_prompt_management import CustomPromptManagement
 from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler
@@ -24,7 +19,7 @@ def setup_anthropic_api_key(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-some-key")
 
 
-class TestCustomPromptManagement(CustomPromptManagement):
+class CustomPromptManagementHelper(CustomPromptManagement):
     def get_chat_completion_prompt(
         self,
         model: str,
@@ -35,7 +30,7 @@ class TestCustomPromptManagement(CustomPromptManagement):
         dynamic_callback_params: StandardCallbackDynamicParams,
     ) -> Tuple[str, List[AllMessageValues], dict]:
         print(
-            "TestCustomPromptManagement: running get_chat_completion_prompt for prompt_id: ",
+            "CustomPromptManagementHelper: running get_chat_completion_prompt for prompt_id: ",
             prompt_id,
         )
         if prompt_id == "test_prompt_id":
@@ -76,10 +71,7 @@ async def test_custom_prompt_management_with_prompt_id(monkeypatch):
 
         assert request_body["model"] == "claude-3-5-sonnet"
         # the message gets applied to the prompt from the custom prompt management callback
-        assert (
-            request_body["messages"][0]["content"][0]["text"]
-            == "This is the prompt for test_prompt_id"
-        )
+        assert request_body["messages"][0]["content"][0]["text"] == "This is the prompt for test_prompt_id"
 
 
 @pytest.mark.asyncio
@@ -132,6 +124,4 @@ async def test_custom_prompt_management_without_prompt_id():
 
         assert request_body["model"] == "claude-3-5-sonnet"
         # the message does not get applied to the prompt from the custom prompt management callback since we did not pass a prompt_id
-        assert (
-            request_body["messages"][0]["content"][0]["text"] == "Hello, how are you?"
-        )
+        assert request_body["messages"][0]["content"][0]["text"] == "Hello, how are you?"
