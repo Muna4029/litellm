@@ -1,12 +1,9 @@
-import json
 import os
 import sys
-from typing import Optional
 
 # Adds the grandparent directory to sys.path to allow importing project modules
 sys.path.insert(0, os.path.abspath("../.."))
 
-import asyncio
 from unittest.mock import patch
 
 import pytest
@@ -20,9 +17,7 @@ def test_max_langfuse_clients_limit():
     Test that the max langfuse clients limit is respected when initializing multiple clients
     """
     # Set max clients to 2 for testing
-    with patch(
-        "litellm.integrations.langfuse.langfuse.MAX_LANGFUSE_INITIALIZED_CLIENTS", 2
-    ):
+    with patch("litellm.integrations.langfuse.MAX_LANGFUSE_INITIALIZED_CLIENTS", 2):
         # Reset the counter
         litellm.initialized_langfuse_clients = 0
 

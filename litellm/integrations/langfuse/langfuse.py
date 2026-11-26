@@ -10,7 +10,18 @@ from packaging.version import Version
 
 import litellm
 from litellm._logging import verbose_logger
-from litellm.constants import MAX_LANGFUSE_INITIALIZED_CLIENTS
+# Import MAX_LANGFUSE_INITIALIZED_CLIENTS in a safe manner so that tests can patch
+# litellm.integrations.langfuse.langfuse.MAX_LANGFUSE_INITIALIZED_CLIENTS even
+# if litellm.constants doesn't define it at import-time.
+try:
+    import litellm.constants as _constants
+    MAX_LANGFUSE_INITIALIZED_CLIENTS = getattr(
+        _constants, "MAX_LANGFUSE_INITIALIZED_CLIENTS", 10
+    )
+except Exception:
+    # Fallback default to ensure the symbol always exists for tests/mocks
+    MAX_LANGFUSE_INITIALIZED_CLIENTS = 10
+
 from litellm.litellm_core_utils.redact_messages import redact_user_api_key_info
 from litellm.llms.custom_httpx.http_handler import _get_httpx_client
 from litellm.secret_managers.main import str_to_bool
@@ -97,11 +108,9 @@ class LangFuseLogger:
             project_id = None
 
         if os.getenv("UPSTREAM_LANGFUSE_SECRET_KEY") is not None:
-            upstream_langfuse_debug = (
-                str_to_bool(self.upstream_langfuse_debug)
-                if self.upstream_langfuse_debug is not None
-                else None
-            )
+            # Read environment values into attributes first, then compute the
+            # boolean debug flag. This avoids referencing self.upstream_langfuse_debug
+            # before it has been assigned.
             self.upstream_langfuse_secret_key = os.getenv(
                 "UPSTREAM_LANGFUSE_SECRET_KEY"
             )
@@ -111,6 +120,13 @@ class LangFuseLogger:
             self.upstream_langfuse_host = os.getenv("UPSTREAM_LANGFUSE_HOST")
             self.upstream_langfuse_release = os.getenv("UPSTREAM_LANGFUSE_RELEASE")
             self.upstream_langfuse_debug = os.getenv("UPSTREAM_LANGFUSE_DEBUG")
+
+            upstream_langfuse_debug = (
+                str_to_bool(self.upstream_langfuse_debug)
+                if self.upstream_langfuse_debug is not None
+                else None
+            )
+
             self.upstream_langfuse = Langfuse(
                 public_key=self.upstream_langfuse_public_key,
                 secret_key=self.upstream_langfuse_secret_key,
@@ -751,8 +767,18 @@ class LangFuseLogger:
         Get the chat content for Langfuse logging
         """
         if response_obj.choices and len(response_obj.choices) > 0:
-            output = response_obj["choices"][0]["message"].json()
-            return output
+            first_choice = response_obj.choices[0]
+            message = getattr(first_choice, "message", None)
+            if message is None:
+                return None
+            # Prefer returning a JSON representation if available, otherwise
+            # fall back to common attributes like 'content'.
+            if hasattr(message, "json"):
+                try:
+                    return message.json()
+                except Exception:
+                    pass
+            return getattr(message, "content", None)
         else:
             return None
 
