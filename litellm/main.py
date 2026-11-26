@@ -568,11 +568,19 @@ async def acompletion(
 
 async def _async_streaming(response, model, custom_llm_provider, args):
     try:
-        print_verbose(f"received response in _async_streaming: {response}")
+        try:
+            print_verbose(f"received response in _async_streaming: {response}")
+        except Exception:
+            # Guard against logging failures (e.g., I/O on closed file) so streaming isn't aborted
+            pass
         if asyncio.iscoroutine(response):
             response = await response
         async for line in response:
-            print_verbose(f"line in async streaming: {line}")
+            try:
+                print_verbose(f"line in async streaming: {line}")
+            except Exception:
+                # Swallow logging errors to avoid terminating the async generator
+                pass
             yield line
     except Exception as e:
         custom_llm_provider = custom_llm_provider or "openai"
@@ -856,7 +864,11 @@ def responses_api_bridge_check(
             mode = "responses"
             model_info["mode"] = mode
     except Exception as e:
-        verbose_logger.debug("Error getting model info: {}".format(e))
+        try:
+            verbose_logger.debug("Error getting model info: {}".format(e))
+        except Exception:
+            # Guard against logging failures so we don't mask the original error or raise new ones
+            pass
 
         if model.startswith(
             "responses/"
@@ -4377,7 +4389,8 @@ async def atext_completion(
     model = args[0] if len(args) > 0 else kwargs["model"]
     ### PASS ARGS TO COMPLETION ###
     kwargs["acompletion"] = True
-    custom_llm_provider = None
+    # Preserve incoming custom_llm_provider from kwargs so provider context isn't lost
+    custom_llm_provider = kwargs.get("custom_llm_provider", None)
     try:
         # Use a partial function to pass your keyword arguments
         func = partial(text_completion, *args, **kwargs)
@@ -4899,7 +4912,7 @@ async def atranscription(*args, **kwargs) -> TranscriptionResponse:
     Allows router to load balance between them
     """
     loop = asyncio.get_event_loop()
-    model = args[0] if len(args) > 0 else kwargs["model"]
+    model = args[0] if len(args) > 0 else kwargs.get("model")
     ### PASS ARGS TO Image Generation ###
     kwargs["atranscription"] = True
     custom_llm_provider = None
@@ -4924,8 +4937,8 @@ async def atranscription(*args, **kwargs) -> TranscriptionResponse:
         elif asyncio.iscoroutine(init_response):
             response = await init_response  # type: ignore
         else:
-            # Call the synchronous function using run_in_executor
-            response = await loop.run_in_executor(None, func_with_context)
+            # Reuse the already obtained init_response instead of re-invoking the call
+            response = init_response
         if not isinstance(response, TranscriptionResponse):
             raise ValueError(
                 f"Invalid response from transcription provider, expected TranscriptionResponse, but got {type(response)}"
@@ -5151,7 +5164,7 @@ async def aspeech(*args, **kwargs) -> HttpxBinaryResponseContent:
     Calls openai tts endpoints.
     """
     loop = asyncio.get_event_loop()
-    model = args[0] if len(args) > 0 else kwargs["model"]
+    model = args[0] if len(args) > 0 else kwargs.get("model")
     ### PASS ARGS TO Image Generation ###
     kwargs["aspeech"] = True
     custom_llm_provider = kwargs.get("custom_llm_provider", None)
@@ -5172,8 +5185,8 @@ async def aspeech(*args, **kwargs) -> HttpxBinaryResponseContent:
         if asyncio.iscoroutine(init_response):
             response = await init_response
         else:
-            # Call the synchronous function using run_in_executor
-            response = await loop.run_in_executor(None, func_with_context)
+            # Reuse the init_response instead of calling run_in_executor again
+            response = init_response
         return response  # type: ignore
     except Exception as e:
         custom_llm_provider = custom_llm_provider or "openai"
@@ -5232,21 +5245,29 @@ def speech(  # noqa: PLR0915
         max_retries = litellm.num_retries or openai.DEFAULT_MAX_RETRIES
     litellm_params_dict = get_litellm_params(**kwargs)
     logging_obj = kwargs.get("litellm_logging_obj", None)
-    logging_obj.update_environment_variables(
-        model=model,
-        user=user,
-        optional_params={},
-        litellm_params={
-            "litellm_call_id": litellm_call_id,
-            "proxy_server_request": proxy_server_request,
-            "model_info": model_info,
-            "metadata": metadata,
-            "preset_cache_key": None,
-            "stream_response": {},
-            **kwargs,
-        },
-        custom_llm_provider=custom_llm_provider,
-    )
+    if logging_obj is not None:
+        try:
+            logging_obj.update_environment_variables(
+                model=model,
+                user=user,
+                optional_params={},
+                litellm_params={
+                    "litellm_call_id": litellm_call_id,
+                    "proxy_server_request": proxy_server_request,
+                    "model_info": model_info,
+                    "metadata": metadata,
+                    "preset_cache_key": None,
+                    "stream_response": {},
+                    **kwargs,
+                },
+                custom_llm_provider=custom_llm_provider,
+            )
+        except Exception:
+            # Guard against logging failures (I/O on closed file etc.) so provider handling isn't aborted
+            try:
+                print_verbose("logging_obj.update_environment_variables failed")
+            except Exception:
+                pass
     response: Optional[HttpxBinaryResponseContent] = None
     if (
         custom_llm_provider == "openai"
@@ -5634,13 +5655,16 @@ def stream_chunk_builder_text_completion(
     for chunk in chunks:
         choices = chunk["choices"]
         for choice in choices:
-            if (
-                choice is not None
-                and hasattr(choice, "text")
-                and choice.get("text") is not None
-            ):
-                _choice = choice.get("text")
-                content_list.append(_choice)
+            if choice is None:
+                continue
+            # Support both dict-like and object-like choice representations
+            text_val = None
+            if isinstance(choice, dict):
+                text_val = choice.get("text")
+            else:
+                text_val = getattr(choice, "text", None)
+            if text_val is not None:
+                content_list.append(text_val)
 
     # Combine the "content" strings into a single string || combine the 'function' strings into a single string
     combined_content = "".join(content_list)
@@ -5660,7 +5684,10 @@ def stream_chunk_builder_text_completion(
     except (
         Exception
     ):  # don't allow this failing to block a complete streaming response from being returned
-        print_verbose("token_counter failed, assuming prompt tokens is 0")
+        try:
+            print_verbose("token_counter failed, assuming prompt tokens is 0")
+        except Exception:
+            pass
         response["usage"]["prompt_tokens"] = 0
     response["usage"]["completion_tokens"] = token_counter(
         model=model,

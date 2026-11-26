@@ -23,6 +23,15 @@ class StandardLoggingPayloadSetup:
                 if k.startswith("x-") and v is not None and isinstance(v, str)
             }
 
-            standard_logging_metadata["requester_custom_headers"] = custom_headers
+            # Prefer attribute assignment for model-like objects (e.g., Pydantic models).
+            # Fall back to mapping assignment if the metadata is a dict-like object.
+            try:
+                setattr(standard_logging_metadata, "requester_custom_headers", custom_headers)
+            except Exception:
+                try:
+                    standard_logging_metadata["requester_custom_headers"] = custom_headers
+                except Exception:
+                    # If neither assignment works, avoid raising to keep logging resilient.
+                    pass
 
         return standard_logging_metadata
