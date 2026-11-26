@@ -730,11 +730,17 @@ async def prepare_key_update_data(
 async def _handle_update_object_permission(
     data_json: dict,
     existing_key_row: LiteLLM_VerificationToken,
+    prisma_client=None,
 ) -> dict:
     """
     Handle the update of object permission.
     """
-    from litellm.proxy.proxy_server import prisma_client
+    # Allow callers to pass in the prisma_client so tests/mocks observe
+    # the same client instance. Fall back to importing if not provided.
+    if prisma_client is None:
+        from litellm.proxy.proxy_server import prisma_client as _prisma_client
+
+        prisma_client = _prisma_client
 
     # Use the common helper to handle the object permission update
     object_permission_id = await handle_update_object_permission_common(
@@ -849,14 +855,15 @@ async def update_key_fn(
             premium_user=premium_user,
         )
 
+        # Use the provided key variable which was popped from data_json
         existing_key_row = await prisma_client.get_data(
-            token=data.key, table_name="key", query_type="find_unique"
+            token=key, table_name="key", query_type="find_unique"
         )
 
         if existing_key_row is None:
             raise HTTPException(
                 status_code=404,
-                detail={"error": f"Team not found, passed team_id={data.team_id}"},
+                detail={"error": f"Key not found, passed key={key}"},
             )
 
         # check if user has permission to update key
@@ -2709,30 +2716,16 @@ async def key_health(
       }
     }
     ```
-
-
-    Response when logging callbacks are not setup correctly:
-    ```json
-    {
-      "key": "unhealthy",
-      "logging_callbacks": {
-        "callbacks": [
-          "gcs_bucket"
-        ],
-        "status": "unhealthy",
-        "details": "Logger exceptions triggered, system is unhealthy: Failed to load vertex credentials. Check to see if credentials containing partial/invalid information."
-      }
-    }
-    ```
     """
     try:
         # Get the key's metadata
         key_metadata = user_api_key_dict.metadata
 
-        health_status: KeyHealthResponse = KeyHealthResponse(
-            key="healthy",
-            logging_callbacks=None,
-        )
+        # Build a plain dict and convert to KeyHealthResponse at the end
+        health_status: dict = {
+            "key": "healthy",
+            "logging_callbacks": None,
+        }
 
         # Check if logging is configured in metadata
         if key_metadata and "logging" in key_metadata:
@@ -2741,10 +2734,24 @@ async def key_health(
                 request=request,
                 key_logging=key_metadata["logging"],
             )
-            health_status["logging_callbacks"] = logging_statuses
+
+            # Convert model to dict if necessary
+            if hasattr(logging_statuses, "dict"):
+                logging_dict = logging_statuses.dict()
+            elif isinstance(logging_statuses, dict):
+                logging_dict = logging_statuses
+            else:
+                # Fallback: try to access attributes
+                logging_dict = {
+                    "callbacks": getattr(logging_statuses, "callbacks", None),
+                    "status": getattr(logging_statuses, "status", None),
+                    "details": getattr(logging_statuses, "details", None),
+                }
+
+            health_status["logging_callbacks"] = logging_dict
 
             # Check if any logging callback is unhealthy
-            if logging_statuses.get("status") == "unhealthy":
+            if logging_dict.get("status") == "unhealthy":
                 health_status["key"] = "unhealthy"
 
         return KeyHealthResponse(**health_status)
