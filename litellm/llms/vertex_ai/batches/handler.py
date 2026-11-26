@@ -26,14 +26,14 @@ class VertexAIBatchPrediction(VertexLLM):
 
     def create_batch(
         self,
-        _is_async: bool,
         create_batch_data: CreateBatchRequest,
-        api_base: Optional[str],
-        vertex_credentials: Optional[VERTEX_CREDENTIALS_TYPES],
-        vertex_project: Optional[str],
-        vertex_location: Optional[str],
-        timeout: Union[float, httpx.Timeout],
-        max_retries: Optional[int],
+        api_base: Optional[str] = None,
+        vertex_credentials: Optional[VERTEX_CREDENTIALS_TYPES] = None,
+        vertex_project: Optional[str] = None,
+        vertex_location: Optional[str] = None,
+        timeout: Union[float, httpx.Timeout] = None,
+        max_retries: Optional[int] = None,
+        _is_async: bool = False,
     ) -> Union[LiteLLMBatch, Coroutine[Any, Any, LiteLLMBatch]]:
         sync_handler = _get_httpx_client()
 
@@ -128,14 +128,14 @@ class VertexAIBatchPrediction(VertexLLM):
 
     def retrieve_batch(
         self,
-        _is_async: bool,
         batch_id: str,
-        api_base: Optional[str],
-        vertex_credentials: Optional[VERTEX_CREDENTIALS_TYPES],
-        vertex_project: Optional[str],
-        vertex_location: Optional[str],
-        timeout: Union[float, httpx.Timeout],
-        max_retries: Optional[int],
+        api_base: Optional[str] = None,
+        vertex_credentials: Optional[VERTEX_CREDENTIALS_TYPES] = None,
+        vertex_project: Optional[str] = None,
+        vertex_location: Optional[str] = None,
+        timeout: Union[float, httpx.Timeout] = None,
+        max_retries: Optional[int] = None,
+        _is_async: bool = False,
     ) -> Union[LiteLLMBatch, Coroutine[Any, Any, LiteLLMBatch]]:
         sync_handler = _get_httpx_client()
 
